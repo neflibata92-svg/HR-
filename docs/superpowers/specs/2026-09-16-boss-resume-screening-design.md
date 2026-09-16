@@ -1,7 +1,7 @@
 # BOSS 直聘本机全自动筛选 + 共享简历库 — 设计规格
 
 - 日期：2026-09-16
-- 状态：待用户审阅规格
+- 状态：已批准；MVP 实现中（分支 `feat/mvp-resume-screening`）
 - 相关调研：
   - [docs/research/2026-09-16-boss-zhipin-integration.md](../../research/2026-09-16-boss-zhipin-integration.md)
   - [docs/research/2026-09-16-local-agent-llm-scoring.md](../../research/2026-09-16-local-agent-llm-scoring.md)
