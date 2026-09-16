@@ -27,6 +27,7 @@ def count_users(db: Session) -> int:
 
 
 def register_user(db: Session, settings: Settings, payload: RegisterRequest) -> User:
+    # 无用户时允许首次注册（即便 ALLOW_REGISTER=false），以便云端开机引导
     if not settings.allow_register and count_users(db) > 0:
         raise PermissionError("register disabled")
     existing = db.scalar(select(User).where(User.username == payload.username))
