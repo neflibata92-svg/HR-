@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import require_api_token
+from resume_api.core.auth import get_current_user
 from resume_api.core.db import get_db
 from resume_api.models import AgentRun
 from resume_api.schemas import AgentRunOut, AgentRunUpsert
 
-router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(require_api_token)])
+router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/runs", response_model=AgentRunOut)

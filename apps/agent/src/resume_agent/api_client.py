@@ -13,7 +13,7 @@ from resume_agent.config import AgentSettings
 class ApiClient:
     def __init__(self, settings: AgentSettings) -> None:
         self.settings = settings
-        self._headers = {"X-Api-Token": settings.api_token}
+        self._headers = {"X-Api-Key": settings.api_key or settings.api_token}
 
     def _url(self, path: str) -> str:
         return f"{self.settings.api_base_url.rstrip('/')}{path}"

@@ -36,39 +36,38 @@
 
 ## 3. 架构
 
-系统分为本机 Agent 与内网服务两块：
+系统分为本机 Agent 与云端服务两块（细节以改版规格为准）：
 
 ```
-[本机 Agent]                      [内网 NAS/小主机]
- Playwright (headed,             api + db + files
+[本机 Agent]                      [云服务器 Compose]
+ Playwright (headed,             Nginx + api + Postgres + files
   persistent profile)              ├─ JD / 阈值 / 话术
   → 硬筛 / 调 LLM / 打招呼         ├─ Resume / Candidate
   → 下附件 → 上报 API              ├─ ExchangeEvent (30d)
-                                   ├─ Score / Outreach 审计
-                                   ├─ ingestor (上传 + 文件夹监视)
+                                   ├─ 用户 JWT / API Key 鉴权
                                    └─ web 管理台
          │                              │
-         └──── HTTPS/Token ─────────────┘
+         └──── HTTPS + X-Api-Key ───────┘
          LLM API（用户自备）
 ```
 
 边界：
 
-- Agent **不作为简历主存储**；简历、交换、JD 以内存服务为准。
+- Agent **不作为简历主存储**；简历、交换、JD 以云端服务为准。
 - 同事通过 Web 管理台共享同一冷却与简历库。
 
-推荐技术选型（可在实现计划中微调，但边界不变）：
+推荐技术选型：
 
 | 层 | 建议 |
 |----|------|
 | Agent | Python 3.11+ / Playwright，持久化 browser profile |
 | API | Python FastAPI |
-| DB | SQLite（MVP）→ 可迁 PostgreSQL |
-| 文件 | NAS 目录（原件）+ DB 元数据/解析文本 |
-| Web | Vue 3 简易管理台（内网） |
+| DB | 生产 PostgreSQL；本地开发可 SQLite |
+| 文件 | 云主机数据卷 + DB 元数据/解析文本 |
+| Web | Vue 3 管理台（公网 HTTPS） |
+| 鉴权 | JWT（Web）+ 个人 API Key（Agent） |
+| 部署 | Docker Compose（Nginx + API + Postgres） |
 | LLM | 可配置 OpenAI 兼容 API（强制 JSON schema） |
-
-依据调研：长期登录用 persistent context；API 与浏览器任务逻辑分离；硬约束在模型打分之前执行。
 
 ## 4. 核心流程
 
@@ -133,9 +132,9 @@
 - **ExchangeEvent**：`candidate_id`、操作人、类型、时间。
 - **AgentRun**：机器标识、状态、最后心跳、最近错误。
 
-文件原件只存 NAS；数据库存元数据与解析文本。
+文件原件存云端数据卷；数据库存元数据与解析文本。
 
-鉴权：内网账号或 Token；Agent 使用服务 Token。
+鉴权：见改版规格（JWT + 个人 API Key）。
 
 ## 7. 异常处理与风控
 
@@ -181,7 +180,8 @@
 
 - 尽量全自动；本机常驻；本人 BOSS 登录态。
 - 小团队共享库 + 30 天交换冷却。
-- 库部署：内网服务/NAS。
+- 库部署：**云服务器 Docker Compose**（非内网 NAS）。
+- 鉴权：账号密码 JWT（Web）+ 个人 API Key（Agent）。
 - 打分：硬筛 + LLM 细打分；≥ 固定阈值自动打招呼。
-- 存量：批量上传 + 文件夹扫描。
-- 架构选型：本机 Playwright Agent + 内网简历服务（方案 1）。
+- 存量：批量上传为主；文件夹扫描非云端默认。
+- 架构选型：本机 Playwright Agent + 云端简历服务。

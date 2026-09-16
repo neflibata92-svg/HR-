@@ -12,11 +12,18 @@ from resume_api.models import ExchangeEvent, OutreachEvent, ScoreEvent
 from resume_api.schemas import ExchangeCreate, OutreachCreate, ScoreEventCreate
 
 
-def add_exchange(db: Session, candidate_id: int, payload: ExchangeCreate) -> ExchangeEvent:
+def add_exchange(
+    db: Session,
+    candidate_id: int,
+    payload: ExchangeCreate,
+    *,
+    actor_user_id: int | None = None,
+) -> ExchangeEvent:
     event = ExchangeEvent(
         candidate_id=candidate_id,
         operator=payload.operator,
         type=payload.type,
+        actor_user_id=actor_user_id,
     )
     db.add(event)
     db.commit()

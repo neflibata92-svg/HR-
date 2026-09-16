@@ -10,8 +10,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# 测试环境变量需在导入 app 前设置
-os.environ["API_TOKEN"] = "test-token"
+os.environ["ENV"] = "development"
+os.environ["DEV_API_TOKEN"] = "test-token"
+os.environ["JWT_SECRET"] = "test-jwt-secret"
+os.environ["ALLOW_REGISTER"] = "true"
 
 
 @pytest.fixture()
@@ -25,7 +27,10 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
     os.environ["STORAGE_DIR"] = str(storage)
     os.environ["WATCH_DIR"] = str(watch)
-    os.environ["API_TOKEN"] = "test-token"
+    os.environ["ENV"] = "development"
+    os.environ["DEV_API_TOKEN"] = "test-token"
+    os.environ["JWT_SECRET"] = "test-jwt-secret"
+    os.environ["ALLOW_REGISTER"] = "true"
 
     from resume_api.core import config as config_mod
     from resume_api.core import db as db_mod
@@ -33,7 +38,10 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
     from resume_api.core.db import Base
 
     settings = Settings(
-        api_token="test-token",
+        env="development",
+        dev_api_token="test-token",
+        jwt_secret="test-jwt-secret",
+        allow_register=True,
         database_url=f"sqlite:///{db_path.as_posix()}",
         storage_dir=str(storage),
         watch_dir=str(watch),
@@ -60,7 +68,6 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
     from resume_api.main import app
 
     app.dependency_overrides[db_mod.get_db] = override_get_db
-    # 禁用 lifespan 里的真实 watcher 干扰：TestClient 会跑 lifespan
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -68,4 +75,6 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
 
 @pytest.fixture()
 def auth_headers() -> dict[str, str]:
-    return {"X-Api-Token": "test-token"}
+    """开发旁路 Token（兼容旧用例）。"""
+
+    return {"X-Api-Key": "test-token"}

@@ -22,17 +22,45 @@ export type AgentRun = {
   last_error: string;
 };
 
-function token(): string {
-  return localStorage.getItem("api_token") || "";
+export type UserMe = {
+  id: number;
+  username: string;
+  role: string;
+  is_active: boolean;
+};
+
+export type ApiKeyRow = {
+  id: number;
+  name: string;
+  key_prefix: string;
+  created_at?: string | null;
+  revoked_at?: string | null;
+};
+
+function accessToken(): string {
+  return sessionStorage.getItem("access_token") || "";
 }
 
-export function setToken(value: string): void {
-  localStorage.setItem("api_token", value);
+export function setTokens(access: string, refresh: string): void {
+  sessionStorage.setItem("access_token", access);
+  sessionStorage.setItem("refresh_token", refresh);
+}
+
+export function clearTokens(): void {
+  sessionStorage.removeItem("access_token");
+  sessionStorage.removeItem("refresh_token");
+}
+
+export function isLoggedIn(): boolean {
+  return Boolean(accessToken());
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers || {});
-  headers.set("X-Api-Token", token());
+  const token = accessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   if (!(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -41,6 +69,45 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(`${response.status} ${await response.text()}`);
   }
   return (await response.json()) as T;
+}
+
+export function register(username: string, password: string): Promise<{
+  access_token: string;
+  refresh_token: string;
+}> {
+  return request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function login(username: string, password: string): Promise<{
+  access_token: string;
+  refresh_token: string;
+}> {
+  return request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function me(): Promise<UserMe> {
+  return request<UserMe>("/auth/me");
+}
+
+export function listApiKeys(): Promise<ApiKeyRow[]> {
+  return request<ApiKeyRow[]>("/auth/api-keys");
+}
+
+export function createApiKey(name: string): Promise<ApiKeyRow & { api_key: string }> {
+  return request("/auth/api-keys", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function revokeApiKey(id: number): Promise<ApiKeyRow> {
+  return request(`/auth/api-keys/${id}`, { method: "DELETE" });
 }
 
 export function listJobs(): Promise<Job[]> {

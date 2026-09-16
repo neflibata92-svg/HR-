@@ -7,6 +7,63 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=100)
+    password: str = Field(min_length=6, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminCreateUserRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=100)
+    password: str = Field(min_length=6, max_length=128)
+    role: str = Field(default="member", pattern="^(admin|member)$")
+
+
+class ApiKeyCreateRequest(BaseModel):
+    name: str = "default"
+
+
+class ApiKeyCreatedOut(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    api_key: str
+    created_at: datetime | None = None
+
+
+class ApiKeyOut(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    created_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class JobCreate(BaseModel):
     name: str
     jd_text: str

@@ -1,7 +1,7 @@
 # 云端部署 + 登录鉴权 — 架构改版规格
 
 - 日期：2026-09-16
-- 状态：待用户审阅规格
+- 状态：已批准（用户确认）
 - 基线规格：[2026-09-16-boss-resume-screening-design.md](./2026-09-16-boss-resume-screening-design.md)
 - 相关调研：
   - [docs/research/2026-09-16-cloud-auth-architecture.md](../../research/2026-09-16-cloud-auth-architecture.md)

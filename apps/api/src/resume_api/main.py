@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from resume_api.core.config import ensure_data_dirs, get_settings
 from resume_api.core.db import SessionLocal, init_db
-from resume_api.routers import agent, candidates, events, jobs, resumes
+from resume_api.routers import agent, auth, candidates, events, jobs, resumes
 from resume_api.services.folder_watch import FolderWatcher
 
 _watcher: FolderWatcher | None = None
@@ -21,28 +21,37 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     ensure_data_dirs(settings)
     init_db()
-    _watcher = FolderWatcher(settings, SessionLocal)
-    _watcher.start()
+    if settings.is_development:
+        _watcher = FolderWatcher(settings, SessionLocal)
+        _watcher.start()
     yield
     if _watcher:
         _watcher.stop()
 
 
-app = FastAPI(title="Resume Screening API", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.include_router(jobs.router)
-app.include_router(candidates.router)
-app.include_router(events.router)
-app.include_router(resumes.router)
-app.include_router(agent.router)
+def create_app() -> FastAPI:
+    settings = get_settings()
+    application = FastAPI(title="Resume Screening API", lifespan=lifespan)
+    origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins if origins != ["*"] else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    application.include_router(auth.router)
+    application.include_router(jobs.router)
+    application.include_router(candidates.router)
+    application.include_router(events.router)
+    application.include_router(resumes.router)
+    application.include_router(agent.router)
+
+    @application.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return application
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+app = create_app()
