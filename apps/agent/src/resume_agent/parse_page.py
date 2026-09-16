@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
@@ -66,12 +65,11 @@ def parse_list_html(html: str) -> list[RawCandidate]:
     return parser.cards
 
 
-def detect_risk_page(html: str) -> bool:
+def detect_risk_page(html: str, keywords: tuple[str, ...] | None = None) -> bool:
     """检测验证码/风控关键词。"""
 
-    patterns = ("验证码", "异常访问", "安全验证", "请完成验证")
+    patterns = keywords or ("验证码", "异常访问", "安全验证", "请完成验证")
     return any(p in html for p in patterns)
 
 
-# 真站选择器占位（需按实际 DOM 校准）
-BOSS_CARD_SELECTOR = ".candidate-card"
+# 真站选择器见 apps/agent/boss_selectors.json

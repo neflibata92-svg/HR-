@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from resume_api.core.auth import require_api_token
 from resume_api.core.db import get_db
+from resume_api.models import OutreachEvent
 from resume_api.schemas import OutreachCreate, OutreachOut, ScoreEventCreate, ScoreEventOut
 from resume_api.services import events as events_service
 
@@ -21,6 +23,25 @@ def post_score(payload: ScoreEventCreate, db: Session = Depends(get_db)) -> Scor
 @router.post("/outreach", response_model=OutreachOut)
 def post_outreach(payload: OutreachCreate, db: Session = Depends(get_db)) -> OutreachOut:
     event, hit = events_service.add_outreach(db, payload)
+    if payload.attachment_received and hit:
+        event.attachment_received = True
+        db.commit()
+        db.refresh(event)
     out = OutreachOut.model_validate(event)
     out.idempotent_hit = hit
     return out
+
+
+@router.get("/outreach")
+def get_outreach(
+    job_id: int = Query(...),
+    candidate_id: int = Query(...),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    existing = db.scalar(
+        select(OutreachEvent).where(
+            OutreachEvent.candidate_id == candidate_id,
+            OutreachEvent.job_id == job_id,
+        )
+    )
+    return {"exists": existing is not None}

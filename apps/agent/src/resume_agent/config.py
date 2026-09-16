@@ -15,3 +15,9 @@ class AgentSettings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     machine_id: str = "local-pc"
     browser_user_data_dir: str = "./data/browser-profile"
+    browser_channel: str = ""
+    screenshot_dir: str = "./data/screenshots"
+    download_dir: str = "./data/downloads"
+    selectors_path: str = ""
+    open_detail_for_segments: bool = True
+    wait_attachment_after_greet: bool = True

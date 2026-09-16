@@ -1,0 +1,41 @@
+{
+  "login_url": "https://www.zhipin.com/web/user/?ka=header-login",
+  "default_recommend_url": "https://www.zhipin.com/web/chat/recommend",
+  "card_selectors": [
+    ".candidate-card",
+    "[data-boss-id]",
+    ".card-list .card-item",
+    ".recommend-card-list li",
+    ".geek-info-card",
+    ".search-card"
+  ],
+  "name_selectors": [".name", ".geek-name", ".candidate-name", "h3", ".title"],
+  "org_selectors": [".company-name", ".corp-name", ".work-company", ".company"],
+  "greet_button_selectors": [
+    "button:has-text('打招呼')",
+    "a:has-text('打招呼')",
+    "[ka*='greet']",
+    ".btn-greet",
+    "button:has-text('继续沟通')"
+  ],
+  "chat_input_selectors": [
+    "textarea",
+    "[contenteditable='true']",
+    ".chat-input textarea",
+    "#chat-input"
+  ],
+  "send_button_selectors": [
+    "button:has-text('发送')",
+    ".btn-send",
+    "[ka*='send']"
+  ],
+  "attachment_selectors": [
+    "a:has-text('附件')",
+    "a:has-text('简历')",
+    "[class*='attach'] a",
+    "a[href*='download']"
+  ],
+  "risk_keywords": ["验证码", "异常访问", "安全验证", "请完成验证", "访问行为异常"],
+  "max_cards_per_run": 30,
+  "attachment_wait_seconds": 120
+}
