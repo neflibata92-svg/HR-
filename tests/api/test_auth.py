@@ -23,6 +23,20 @@ def test_register_login_me(client) -> None:
     assert login.status_code == 200
 
 
+def test_only_first_user_can_self_register(client) -> None:
+    first = client.post(
+        "/auth/register",
+        json={"username": "first.admin", "password": "secret12"},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        "/auth/register",
+        json={"username": "anonymous.hr", "password": "secret12"},
+    )
+    assert second.status_code == 403
+
+
 def test_api_key_create_and_use(client) -> None:
     tokens = client.post(
         "/auth/register",

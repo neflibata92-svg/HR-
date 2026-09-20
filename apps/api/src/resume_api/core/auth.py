@@ -20,6 +20,7 @@ class CurrentUser:
     username: str
     role: str
     auth_via: str  # jwt | api_key | dev_token
+    must_change_password: bool
 
 
 def get_current_user(
@@ -45,7 +46,13 @@ def get_current_user(
         user = db.get(User, api_key.user_id)
         if user is None or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user inactive")
-        return CurrentUser(id=user.id, username=user.username, role=user.role, auth_via="api_key")
+        return CurrentUser(
+            id=user.id,
+            username=user.username,
+            role=user.role,
+            auth_via="api_key",
+            must_change_password=user.must_change_password,
+        )
 
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
@@ -62,12 +69,31 @@ def get_current_user(
         user = db.get(User, user_id)
         if user is None or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user inactive")
-        return CurrentUser(id=user.id, username=user.username, role=user.role, auth_via="jwt")
+        return CurrentUser(
+            id=user.id,
+            username=user.username,
+            role=user.role,
+            auth_via="jwt",
+            must_change_password=user.must_change_password,
+        )
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing credentials")
 
 
-def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+def require_password_change_complete(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="password change required",
+        )
+    return user
+
+
+def require_admin(
+    user: CurrentUser = Depends(require_password_change_complete),
+) -> CurrentUser:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin required")
     return user
@@ -87,4 +113,10 @@ def _ensure_dev_user(db: Session) -> CurrentUser:
         db.add(user)
         db.commit()
         db.refresh(user)
-    return CurrentUser(id=user.id, username=user.username, role=user.role, auth_via="dev_token")
+    return CurrentUser(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        auth_via="dev_token",
+        must_change_password=user.must_change_password,
+    )

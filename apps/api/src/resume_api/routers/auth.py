@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import CurrentUser, get_current_user, require_admin
+from resume_api.core.auth import (
+    CurrentUser,
+    get_current_user,
+    require_admin,
+    require_password_change_complete,
+)
 from resume_api.core.config import Settings, get_settings
 from resume_api.core.db import get_db
 from resume_api.schemas import (
@@ -13,11 +18,14 @@ from resume_api.schemas import (
     ApiKeyCreateRequest,
     ApiKeyCreatedOut,
     ApiKeyOut,
+    ChangePasswordRequest,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserOut,
+    UserStatusRequest,
 )
 from resume_api.services import auth_service
 
@@ -51,6 +59,27 @@ def login(
     return auth_service.issue_tokens(settings, user)
 
 
+@router.post("/change-password", response_model=TokenResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> TokenResponse:
+    if user.auth_via != "jwt":
+        raise HTTPException(status_code=403, detail="jwt authentication required")
+    try:
+        row = auth_service.change_password(
+            db,
+            user.id,
+            payload.current_password,
+            payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return auth_service.issue_tokens(settings, row)
+
+
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(
     payload: RefreshRequest,
@@ -73,7 +102,15 @@ def me(user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_
     return UserOut.model_validate(row)
 
 
-@router.post("/users", response_model=UserOut)
+@router.get("/users", response_model=list[UserOut])
+def admin_list_users(
+    _: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[UserOut]:
+    return [UserOut.model_validate(user) for user in auth_service.list_users(db)]
+
+
+@router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def admin_create_user(
     payload: AdminCreateUserRequest,
     _: CurrentUser = Depends(require_admin),
@@ -86,10 +123,42 @@ def admin_create_user(
     return UserOut.model_validate(user)
 
 
+@router.patch("/users/{user_id}/status", response_model=UserOut)
+def admin_set_user_status(
+    user_id: int,
+    payload: UserStatusRequest,
+    _: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    try:
+        user = auth_service.set_member_status(db, user_id, payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return UserOut.model_validate(user)
+
+
+@router.post("/users/{user_id}/reset-password", response_model=UserOut)
+def admin_reset_user_password(
+    user_id: int,
+    payload: ResetPasswordRequest,
+    _: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    try:
+        user = auth_service.reset_member_password(db, user_id, payload.temporary_password)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return UserOut.model_validate(user)
+
+
 @router.post("/api-keys", response_model=ApiKeyCreatedOut)
 def create_api_key(
     payload: ApiKeyCreateRequest,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_password_change_complete),
     db: Session = Depends(get_db),
 ) -> ApiKeyCreatedOut:
     row, plaintext = auth_service.create_api_key(db, user.id, payload.name)
@@ -104,7 +173,7 @@ def create_api_key(
 
 @router.get("/api-keys", response_model=list[ApiKeyOut])
 def list_api_keys(
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_password_change_complete),
     db: Session = Depends(get_db),
 ) -> list[ApiKeyOut]:
     return [ApiKeyOut.model_validate(k) for k in auth_service.list_api_keys(db, user.id)]
@@ -113,7 +182,7 @@ def list_api_keys(
 @router.delete("/api-keys/{key_id}", response_model=ApiKeyOut)
 def revoke_api_key(
     key_id: int,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_password_change_complete),
     db: Session = Depends(get_db),
 ) -> ApiKeyOut:
     row = auth_service.revoke_api_key(db, user.id, key_id)

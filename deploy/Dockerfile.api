@@ -8,7 +8,7 @@ COPY apps/api /app/apps/api
 RUN pip install --no-cache-dir \
     -e /app/packages/domain \
     fastapi uvicorn[standard] sqlalchemy pydantic-settings python-multipart \
-    pypdf python-docx pyjwt bcrypt passlib "psycopg[binary]"
+    pypdf python-docx httpx pyjwt bcrypt passlib "psycopg[binary]"
 
 ENV PYTHONPATH=/app/apps/api/src:/app/packages/domain/src
 EXPOSE 8000

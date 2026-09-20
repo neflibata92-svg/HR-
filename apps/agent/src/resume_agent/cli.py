@@ -8,7 +8,6 @@ from pathlib import Path
 from resume_agent.api_client import ApiClient
 from resume_agent.config import AgentSettings
 from resume_agent.live_runner import run_live_round, run_login
-from resume_agent.llm import LlmScorer
 from resume_agent.runner import run_fixture_round
 from resume_agent.selectors import load_boss_selectors
 
@@ -34,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_login(settings, load_boss_selectors(Path(settings.selectors_path) if settings.selectors_path else None))
 
     api = ApiClient(settings)
-    scorer = LlmScorer(settings)
+    scorer = api
 
     if args.command == "run":
         if args.live:

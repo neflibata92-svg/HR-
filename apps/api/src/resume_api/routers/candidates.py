@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import CurrentUser, get_current_user
+from resume_api.core.auth import CurrentUser, require_password_change_complete
 from resume_api.core.db import get_db
 from resume_api.schemas import CandidateOut, CandidateUpsert, ExchangeBlockedOut, ExchangeCreate
 from resume_api.services import candidates as candidates_service
@@ -14,7 +14,7 @@ from resume_api.services import events as events_service
 router = APIRouter(
     prefix="/api/candidates",
     tags=["candidates"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(require_password_change_complete)],
 )
 
 
@@ -33,7 +33,7 @@ def create_exchange(
     candidate_id: int,
     payload: ExchangeCreate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_password_change_complete),
 ) -> dict[str, int]:
     if candidates_service.get_candidate(db, candidate_id) is None:
         raise HTTPException(status_code=404, detail="candidate not found")

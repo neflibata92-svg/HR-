@@ -25,8 +25,19 @@ export type AgentRun = {
 export type UserMe = {
   id: number;
   username: string;
-  role: string;
+  role: "admin" | "member";
   is_active: boolean;
+  must_change_password: boolean;
+};
+
+export type UserRow = UserMe & {
+  created_at: string | null;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
 };
 
 export type ApiKeyRow = {
@@ -71,20 +82,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function register(username: string, password: string): Promise<{
-  access_token: string;
-  refresh_token: string;
-}> {
+export function register(username: string, password: string): Promise<TokenResponse> {
   return request("/auth/register", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
 }
 
-export function login(username: string, password: string): Promise<{
-  access_token: string;
-  refresh_token: string;
-}> {
+export function login(username: string, password: string): Promise<TokenResponse> {
   return request("/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
@@ -93,6 +98,38 @@ export function login(username: string, password: string): Promise<{
 
 export function me(): Promise<UserMe> {
   return request<UserMe>("/auth/me");
+}
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<TokenResponse> {
+  return request<TokenResponse>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export function listUsers(): Promise<UserRow[]> {
+  return request<UserRow[]>("/auth/users");
+}
+
+export function createHr(username: string, temporaryPassword: string): Promise<UserRow> {
+  return request<UserRow>("/auth/users", {
+    method: "POST",
+    body: JSON.stringify({ username, temporary_password: temporaryPassword }),
+  });
+}
+
+export function setUserStatus(id: number, isActive: boolean): Promise<UserRow> {
+  return request<UserRow>(`/auth/users/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+export function resetUserPassword(id: number, temporaryPassword: string): Promise<UserRow> {
+  return request<UserRow>(`/auth/users/${id}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ temporary_password: temporaryPassword }),
+  });
 }
 
 export function listApiKeys(): Promise<ApiKeyRow[]> {

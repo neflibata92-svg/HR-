@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     dev_api_token: str = "dev-token-change-me"
     # 已废弃：生产勿依赖；保留字段以免旧 .env 报错
     api_token: str = ""
+    # 仅 API 服务端持有，禁止下发到 Web 或本机 Agent
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout_seconds: float = 60.0
+    llm_max_attempts: int = 3
 
     @property
     def is_development(self) -> bool:

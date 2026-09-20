@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import FirstPasswordChange from "./components/FirstPasswordChange.vue";
+import HrAccountManagement from "./components/HrAccountManagement.vue";
 import {
   clearTokens,
   createApiKey,
@@ -39,21 +41,44 @@ const jobThreshold = ref(80);
 const jobGreet = ref("您好，看了您的经历很匹配，方便发一下附件简历吗？");
 const operator = ref("hr");
 
-async function refresh(): Promise<void> {
+function resetWorkspace(): void {
+  jobs.value = [];
+  candidates.value = [];
+  runs.value = [];
+  apiKeys.value = [];
+  newApiKeyPlain.value = "";
+}
+
+async function loadWorkspace(): Promise<void> {
+  jobs.value = await listJobs();
+  candidates.value = await listCandidates(query.value.trim());
+  runs.value = await listAgentRuns();
+  apiKeys.value = await listApiKeys();
+}
+
+async function loadCurrentUser(): Promise<void> {
   error.value = "";
   try {
-    user.value = await me();
-    jobs.value = await listJobs();
-    candidates.value = await listCandidates(query.value.trim());
-    runs.value = await listAgentRuns();
-    apiKeys.value = await listApiKeys();
+    const currentUser = await me();
+    user.value = currentUser;
+    if (currentUser.must_change_password) {
+      resetWorkspace();
+      return;
+    }
+    await loadWorkspace();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
-    if (String(error.value).startsWith("401")) {
+    if (error.value.startsWith("401")) {
       clearTokens();
       user.value = null;
+      resetWorkspace();
     }
   }
+}
+
+async function onPasswordChanged(accessToken: string, refreshToken: string): Promise<void> {
+  setTokens(accessToken, refreshToken);
+  await loadCurrentUser();
 }
 
 async function onLogin(): Promise<void> {
@@ -61,7 +86,7 @@ async function onLogin(): Promise<void> {
   try {
     const tokens = await login(username.value.trim(), password.value);
     setTokens(tokens.access_token, tokens.refresh_token);
-    await refresh();
+    await loadCurrentUser();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   }
@@ -72,7 +97,7 @@ async function onRegister(): Promise<void> {
   try {
     const tokens = await register(username.value.trim(), password.value);
     setTokens(tokens.access_token, tokens.refresh_token);
-    await refresh();
+    await loadCurrentUser();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   }
@@ -81,6 +106,7 @@ async function onRegister(): Promise<void> {
 function onLogout(): void {
   clearTokens();
   user.value = null;
+  resetWorkspace();
 }
 
 async function onCreateJob(): Promise<void> {
@@ -92,12 +118,12 @@ async function onCreateJob(): Promise<void> {
   });
   jobName.value = "";
   jobJd.value = "";
-  await refresh();
+  await loadCurrentUser();
 }
 
 async function onMark(id: number): Promise<void> {
   await markExchange(id, operator.value || user.value?.username || "hr");
-  await refresh();
+  await loadCurrentUser();
 }
 
 async function onUpload(event: Event): Promise<void> {
@@ -106,29 +132,35 @@ async function onUpload(event: Event): Promise<void> {
   if (!file) return;
   await uploadResume(file);
   input.value = "";
-  await refresh();
+  await loadCurrentUser();
 }
 
 async function onCreateKey(): Promise<void> {
   const created = await createApiKey("agent");
   newApiKeyPlain.value = created.api_key;
-  await refresh();
+  await loadCurrentUser();
 }
 
 async function onRevokeKey(id: number): Promise<void> {
   await revokeApiKey(id);
-  await refresh();
+  await loadCurrentUser();
 }
 
 onMounted(() => {
   if (isLoggedIn()) {
-    void refresh();
+    void loadCurrentUser();
   }
 });
 </script>
 
 <template>
-  <div class="layout">
+  <FirstPasswordChange
+    v-if="user?.must_change_password"
+    @changed="onPasswordChanged"
+    @logout="onLogout"
+  />
+
+  <div v-else class="layout">
     <h1>简历库管理台</h1>
     <p class="muted">云端共享 JD、候选人、交换冷却；本机 Agent 使用个人 API Key。</p>
 
@@ -148,12 +180,14 @@ onMounted(() => {
     <template v-else>
       <section class="panel">
         <div class="row">
-          <span>{{ user.username }}（{{ user.role }}）</span>
-          <button type="button" @click="refresh">刷新</button>
+          <span>{{ user.username }}（{{ user.role === "admin" ? "HR 总负责人" : "HR" }}）</span>
+          <button type="button" @click="loadCurrentUser">刷新</button>
           <button type="button" @click="onLogout">退出</button>
         </div>
-        <p v-if="error" style="color: #a33">{{ error }}</p>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
       </section>
+
+      <HrAccountManagement v-if="user.role === 'admin'" />
 
       <section class="panel">
         <h2>API Key（给本机 Agent）</h2>
@@ -223,7 +257,7 @@ onMounted(() => {
         <div class="row">
           <input v-model="query" placeholder="搜索姓名/BOSS ID" style="max-width: 240px" />
           <input v-model="operator" placeholder="操作人" style="max-width: 140px" />
-          <button type="button" @click="refresh">搜索</button>
+          <button type="button" @click="loadCurrentUser">搜索</button>
           <label>
             上传简历
             <input type="file" @change="onUpload" />

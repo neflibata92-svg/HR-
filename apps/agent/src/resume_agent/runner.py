@@ -8,9 +8,8 @@ from typing import Any
 from resume_domain.fingerprint import candidate_fingerprint
 from resume_agent.api_client import ApiClient
 from resume_agent.config import AgentSettings
-from resume_agent.llm import LlmScorer
 from resume_agent.parse_page import RawCandidate, parse_list_html, detect_risk_page
-from resume_agent.pipeline import process_candidate
+from resume_agent.pipeline import Scorer, process_candidate
 from resume_agent.rate_limit import sleep_action_delay
 
 
@@ -28,7 +27,7 @@ def process_job_candidates(
     *,
     settings: AgentSettings,
     api: ApiClient,
-    scorer: LlmScorer,
+    scorer: Scorer,
     job: dict[str, Any],
     candidates: list[RawCandidate],
     greeter: PipelineGreeter | None = None,
@@ -68,14 +67,13 @@ def process_job_candidates(
             {
                 "candidate_id": upserted["id"],
                 "job_id": job["id"],
-                "hard_filter_passed": result.action
-                not in {"hard_filter_reject", "score_error", "skip_already_greeted"},
+                "hard_filter_passed": result.action != "hard_filter_reject",
                 "hard_filter_reasons": result.reasons
                 if result.action == "hard_filter_reject"
                 else [],
                 "score": result.score,
                 "reason": ";".join(result.reasons),
-                "model": settings.llm_model,
+                "model": result.model,
             }
         )
         if result.action == "greeted":
@@ -103,7 +101,7 @@ def process_job_candidates(
 def run_fixture_round(
     settings: AgentSettings,
     api: ApiClient,
-    scorer: LlmScorer,
+    scorer: Scorer,
     fixture: Path,
 ) -> int:
     html = fixture.read_text(encoding="utf-8")
