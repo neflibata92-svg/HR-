@@ -35,7 +35,11 @@ def open_persistent_browser(settings: AgentSettings) -> Iterator[Any]:
         "headless": False,
         "viewport": None,
         "accept_downloads": True,
-        "args": ["--disable-blink-features=AutomationControlled"],
+        "ignore_default_args": ["--no-sandbox"],
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-proxy-server",
+        ],
     }
     if settings.browser_channel:
         launch_kwargs["channel"] = settings.browser_channel

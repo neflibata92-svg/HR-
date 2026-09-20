@@ -1,0 +1,43 @@
+<h2>首版页面结构</h2>
+<p class="subtitle">统一左侧导航，列表进入右侧抽屉或详情页；关键操作集中在页面右上角。</p>
+
+<div class="cards">
+  <div class="card" data-choice="workbench" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px">
+      <div class="mock-nav">工作台　　电脑 A · Agent 在线 · BOSS 已登录</div>
+      <div style="display:flex;gap:8px;margin-top:8px"><div class="mock-sidebar">工作台<br>岗位<br>候选人<br>简历库</div><div class="mock-content"><strong>选择电脑 + 岗位</strong><br><button class="mock-button">开始自动筛选</button><div class="placeholder" style="margin-top:8px">发现 → 达标 → 问候 → 简历</div><div class="placeholder" style="margin-top:8px">实时运行日志</div></div></div>
+    </div>
+    <div class="card-body"><h3>1. 工作台</h3><p>机器卡片、任务启动与控制、实时漏斗、异常提示、发送额度和最近活动。</p></div>
+  </div>
+
+  <div class="card" data-choice="jobs" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px">
+      <div class="mock-nav">岗位　<button class="mock-button">新建岗位</button></div>
+      <div class="mock-content" style="margin-top:8px"><div class="placeholder">产品经理　已确认　阈值 80　启用</div><div class="placeholder" style="margin-top:6px">Java 工程师　待确认　阈值 85　停用</div><div class="placeholder" style="margin-top:6px">JD → AI 生成维度/权重 → 人工编辑确认</div></div>
+    </div>
+    <div class="card-body"><h3>2. 岗位</h3><p>岗位列表与编辑器；评分规则以结构化维度呈现，保留 AI 生成版本和人工确认状态。</p></div>
+  </div>
+
+  <div class="card" data-choice="candidates" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px">
+      <div class="mock-nav">候选人　[岗位：产品经理 ▼]　[阶段 ▼]　搜索</div>
+      <div class="mock-content" style="margin-top:8px"><div class="placeholder">王女士　86 分　已收简历　查看详情</div><div class="placeholder" style="margin-top:6px">李先生　82 分　已问候　查看详情</div><div class="placeholder" style="margin-top:6px">详情：硬筛结果 / 分项得分 / 理由 / 沟通记录</div></div>
+    </div>
+    <div class="card-body"><h3>3. 候选人</h3><p>按岗位和阶段查看；详情包含评分证据、淘汰原因、消息状态和关联简历。</p></div>
+  </div>
+
+  <div class="card" data-choice="resumes" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px">
+      <div class="mock-nav">简历库　<button class="mock-button">上传已有简历</button></div>
+      <div class="mock-content" style="margin-top:8px"><div class="placeholder">陈某.pdf　BOSS 自动获取　产品经理　已解析</div><div class="placeholder" style="margin-top:6px">赵某.docx　手工上传　Java 工程师　待关联</div><div class="placeholder" style="margin-top:6px">搜索 / 来源 / 岗位 / 解析状态 / 重复项</div></div>
+    </div>
+    <div class="card-body"><h3>4. 简历库</h3><p>自动附件与手工上传统一管理；支持预览、下载、解析文本、关联岗位候选人和重复提示。</p></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>自动发送前的确认门槛</h3>
+  <div class="placeholder" style="text-align:left;line-height:2">✓ JD 已填写　✓ 评分维度与权重已人工确认　✓ 达标阈值已确认<br>✓ 问候语已预览　✓ 每日发送上限已设置　✓ 当前电脑 Agent 在线　✓ BOSS 已登录<br><strong>全部满足后，“开始自动筛选”按钮才可用。</strong></div>
+</div>
+
+<p class="subtitle">请点击你认为最需要调整的页面（可多选），并在对话中说明；如果结构可以，就回复“页面结构确认”。</p>

@@ -17,7 +17,7 @@ class AgentSettings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     machine_id: str = "local-pc"
     browser_user_data_dir: str = "./data/browser-profile"
-    browser_channel: str = ""
+    browser_channel: str = "chrome"
     screenshot_dir: str = "./data/screenshots"
     download_dir: str = "./data/downloads"
     selectors_path: str = ""

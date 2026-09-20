@@ -1,0 +1,46 @@
+<h2>B 方案：四模块工作台与业务闭环</h2>
+<p class="subtitle">左侧固定导航，工作台负责控制和总览；岗位、候选人、简历库负责配置与沉淀。</p>
+
+<div class="mockup">
+  <div class="mockup-header">招聘自动化平台</div>
+  <div class="mockup-body" style="display:grid;grid-template-columns:150px 1fr;gap:14px;min-height:430px">
+    <div class="mock-sidebar" style="line-height:2.6">▣ 工作台<br>▤ 岗位<br>♙ 候选人<br>▧ 简历库<br><hr>Agent：在线<br>BOSS：已登录</div>
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <div><span class="label">当前执行岗位</span><br><strong>高级产品经理</strong>　状态：运行中</div>
+        <div><button class="mock-button">暂停任务</button>　<button class="mock-button">停止任务</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0">
+        <div class="placeholder">今日发现<br><strong>36</strong></div>
+        <div class="placeholder">评分达标<br><strong>8</strong></div>
+        <div class="placeholder">问候成功<br><strong>6</strong></div>
+        <div class="placeholder">收到简历<br><strong>3</strong></div>
+      </div>
+      <h3>实时任务流</h3>
+      <div class="placeholder" style="text-align:left;line-height:2">09:41　发现候选人 王女士　→ 硬筛通过<br>09:42　模型评分 86 分　→ 达到阈值<br>09:42　问候发送成功<br>09:51　收到附件简历　→ 已归档「高级产品经理」</div>
+      <div style="margin-top:14px"><span class="label">安全栏</span>　今日已发送 6 / 上限 20　·　每次间隔 45–90 秒　·　异常自动暂停</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>四个模块的职责</h3>
+  <div class="options" data-multiselect>
+    <div class="option selected" data-choice="workbench" onclick="toggleSelect(this)"><div class="letter">1</div><div class="content"><h3>工作台</h3><p>选择一个岗位启动任务；展示 Agent/BOSS 登录状态、实时进度、漏斗、错误和停止控制。首版同一时间只运行一个岗位，避免多岗位切换导致误发。</p></div></div>
+    <div class="option selected" data-choice="jobs" onclick="toggleSelect(this)"><div class="letter">2</div><div class="content"><h3>岗位</h3><p>管理 JD、问候语、硬筛条件、评分维度与权重、达标阈值、发送上限。AI 从 JD 生成草案，必须人工确认后才能启用。</p></div></div>
+    <div class="option selected" data-choice="candidates" onclick="toggleSelect(this)"><div class="letter">3</div><div class="content"><h3>候选人</h3><p>默认按岗位查看漏斗阶段：新发现、已筛选、已问候、已回复、已收简历、淘汰；支持查看评分明细、筛选原因和沟通记录。</p></div></div>
+    <div class="option selected" data-choice="resumes" onclick="toggleSelect(this)"><div class="letter">4</div><div class="content"><h3>简历库</h3><p>统一保存 BOSS 自动收到的附件和手工上传的已有简历；支持岗位标签、来源、解析状态、去重、搜索及关联候选人。</p></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>核心数据流</h3>
+  <div class="placeholder" style="text-align:left;line-height:2.2">
+    创建岗位/JD → AI 生成评分标准 → 人工确认启用<br>
+    工作台选择岗位 → 下发任务 → 本机 Agent 浏览 BOSS 推荐页<br>
+    发现候选人 → 硬筛 → 模型评分 → 达标后发送问候 → 回传结果<br>
+    候选人回复附件 → Agent 下载 → 简历解析/去重 → 简历库归档 → 关联岗位与候选人
+  </div>
+</div>
+
+<p class="subtitle">需要确认的产品边界：首版是否接受“同一时间只运行一个岗位”？这是最安全、最快形成闭环的方案。</p>

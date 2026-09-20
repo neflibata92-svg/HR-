@@ -1,0 +1,63 @@
+<h2>多电脑调度模型</h2>
+<p class="subtitle">调度单位是“电脑 / Agent”，每台电脑独占一个运行任务；不同电脑互不阻塞。</p>
+
+<div class="mockup">
+  <div class="mockup-header">工作台 · Agent 运行矩阵</div>
+  <div class="mockup-body">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div class="placeholder" style="text-align:left;line-height:1.9">
+        <strong>电脑 A · 在线</strong><br>
+        BOSS 账号：招聘账号 A<br>
+        当前岗位：高级产品经理<br>
+        状态：运行中<br>
+        今日发送：6 / 20<br>
+        <button class="mock-button">查看任务</button>
+      </div>
+      <div class="placeholder" style="text-align:left;line-height:1.9">
+        <strong>电脑 B · 在线</strong><br>
+        BOSS 账号：招聘账号 B<br>
+        当前岗位：Java 工程师<br>
+        状态：运行中<br>
+        今日发送：11 / 20<br>
+        <button class="mock-button">查看任务</button>
+      </div>
+      <div class="placeholder" style="text-align:left;line-height:1.9">
+        <strong>电脑 C · 空闲</strong><br>
+        BOSS 账号：已登录<br>
+        当前岗位：无<br>
+        状态：可分配<br>
+        今日发送：0 / 20<br>
+        <button class="mock-button">分配岗位</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>任务分配规则</h3>
+  <div class="placeholder" style="text-align:left;line-height:2.2">
+    ① 用户选择“电脑 + 岗位”创建任务<br>
+    ② 服务端检查该电脑是否在线、是否空闲、BOSS 是否已登录<br>
+    ③ 创建机器独占锁，保证同一电脑只领取一个任务<br>
+    ④ Agent 领取任务并持续上报心跳、进度和运行日志<br>
+    ⑤ 完成、停止或心跳超时后释放锁；异常任务标记为中断，不自动重复发送
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>支持的情况</h4>
+    <ul><li>电脑 A 跑岗位 1，电脑 B 同时跑岗位 2</li><li>同一岗位可分给不同电脑，但各自按候选人去重</li><li>电脑离线后保留进度，恢复时由用户决定是否继续</li><li>每台电脑独立统计发送限额和登录状态</li></ul>
+  </div>
+  <div class="cons">
+    <h4>禁止或保护</h4>
+    <ul><li>同一电脑同时启动第二个岗位</li><li>离线电脑接收新任务</li><li>Agent 心跳中断后继续计算为“运行中”</li><li>失败重试时再次问候同一候选人</li></ul>
+  </div>
+</div>
+
+<div class="section">
+  <h3>任务状态</h3>
+  <div class="placeholder">待领取 → 运行中 ⇄ 已暂停 → 已完成　｜　运行中 → 异常中断 / 已停止</div>
+</div>
+
+<p class="subtitle">下一项需要确认：同一个 BOSS 账号是否可能同时登录在多台电脑运行？推荐首版禁止，按“BOSS 账号 + 电脑”双重防冲突。</p>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 from resume_domain.fingerprint import candidate_fingerprint
 from resume_agent.api_client import ApiClient
@@ -17,12 +18,23 @@ from resume_agent.selectors import BossSelectors, load_boss_selectors
 
 def run_login(settings: AgentSettings, selectors: BossSelectors | None = None) -> int:
     selectors = selectors or _load(settings)
-    with open_persistent_browser(settings) as context:
-        page = first_page(context)
-        session = BossLiveSession(page, settings, selectors)
-        session.goto(selectors.login_url)
-        session.wait_manual_login()
-        print(f"登录完成，Profile 目录: {settings.browser_user_data_dir}")
+    profile = Path(settings.browser_user_data_dir).resolve()
+    profile.mkdir(parents=True, exist_ok=True)
+    chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if not chrome.exists():
+        print("未找到 Google Chrome，请先安装后重试。")
+        return 1
+    print("正在用普通 Chrome 打开 BOSS 登录页，请完成登录后关闭该 Chrome 窗口。")
+    subprocess.run(
+        [
+            str(chrome),
+            f"--user-data-dir={profile}",
+            "--no-proxy-server",
+            selectors.login_url,
+        ],
+        check=False,
+    )
+    print(f"登录状态已保存，Profile 目录: {settings.browser_user_data_dir}")
     return 0
 
 

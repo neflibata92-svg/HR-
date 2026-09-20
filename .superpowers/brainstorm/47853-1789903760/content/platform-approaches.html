@@ -1,0 +1,57 @@
+<h2>招聘自动化工作台：三种落地路径</h2>
+<p class="subtitle">你的四模块构想可执行。关键差异在于：工作台只是展示结果，还是也能控制本机 BOSS Agent。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px">
+      <div class="mock-nav">Web 工作台</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div class="mock-sidebar">岗位<br>候选人<br>简历库</div>
+        <div class="mock-content">查看数据<br><br><button class="mock-button">终端启动 Agent</button></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 展示增强型</h3>
+      <p>保留终端启动方式，Web 只负责配置和查看。改动最小，但不符合“平台内一键运行”。</p>
+    </div>
+  </div>
+
+  <div class="card selected" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px">
+      <div class="mock-nav">招聘自动化控制台 · Agent 在线</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div class="mock-sidebar">工作台<br>岗位<br>候选人<br>简历库</div>
+        <div class="mock-content">
+          <span class="label">当前岗位</span><br>高级产品经理<br><br>
+          <button class="mock-button">开始自动筛选</button>　<button class="mock-button">停止</button>
+          <div class="placeholder" style="margin-top:12px">发现 36 → 达标 8 → 已问候 6 → 收到简历 3</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 控制台闭环型（推荐）</h3>
+      <p>Web 选择岗位并下发任务，本机 Agent 执行 BOSS 自动化，状态与结果实时回传。体验完整，风险可控。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px">
+      <div class="mock-nav">云端无人值守系统</div>
+      <div class="mock-content" style="margin-top:10px">定时任务 → 云浏览器 → 自动筛选 → 自动沟通 → 简历归档</div>
+    </div>
+    <div class="card-body">
+      <h3>C. 云端全自动型</h3>
+      <p>无需本机在线，但登录风控、账号安全、部署成本和平台规则风险最高，当前阶段不建议。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>对你四个想法的执行判断</h3>
+  <div class="pros-cons">
+    <div class="pros"><h4>可以直接规划</h4><ul><li>按岗位筛选与独立评分标准</li><li>达标后自动发送岗位问候语</li><li>候选人按岗位归档和追踪</li><li>已有简历与自动获取简历统一入库</li></ul></div>
+    <div class="cons"><h4>需要明确边界</h4><ul><li>“翻 BOSS 主页”必须由本机 Agent 执行，网页不能直接操控 BOSS</li><li>JD 自动生成标准需要模型 API Key，并要求人工确认后启用</li><li>收到附件的识别依赖 Agent 持续运行或定时轮询</li><li>自动发送需真实限流、暂停按钮与审计记录</li></ul></div>
+  </div>
+</div>
+
+<p class="subtitle">请点击选择路径。推荐 B：既实现平台内操作，又保留本机登录态和人工控制。</p>

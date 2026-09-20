@@ -1,0 +1,34 @@
+<h2>确认后的系统架构</h2>
+<p class="subtitle">一台电脑固定使用一个独立 BOSS 账号；平台统一配置岗位、调度任务和沉淀招聘数据。</p>
+
+<div class="mockup">
+  <div class="mockup-header">Web 招聘平台（统一控制与数据中心）</div>
+  <div class="mockup-body">
+    <div class="placeholder" style="line-height:2">岗位与评分标准　·　任务调度　·　候选人库　·　简历库　·　发送审计　·　全局去重</div>
+    <div style="text-align:center;font-size:24px;margin:8px">↓ 下发任务　　↑ 心跳 / 进度 / 结果 / 简历</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div class="placeholder" style="text-align:left;line-height:1.9"><strong>电脑 A / Agent A</strong><br>BOSS 账号 A（固定）<br>岗位：产品经理<br>浏览、筛选、评分、问候、收附件</div>
+      <div class="placeholder" style="text-align:left;line-height:1.9"><strong>电脑 B / Agent B</strong><br>BOSS 账号 B（固定）<br>岗位：Java 工程师<br>浏览、筛选、评分、问候、收附件</div>
+      <div class="placeholder" style="text-align:left;line-height:1.9"><strong>电脑 C / Agent C</strong><br>BOSS 账号 C（固定）<br>岗位：空闲<br>等待平台分配</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>账号与机器约束</h3>
+  <div class="options" data-multiselect>
+    <div class="option selected" data-choice="binding" onclick="toggleSelect(this)"><div class="letter">1</div><div class="content"><h3>固定绑定</h3><p>每台电脑保存自己的 BOSS 登录状态；平台只保存账号别名与登录状态，不上传 Cookie 和密码。</p></div></div>
+    <div class="option selected" data-choice="exclusive" onclick="toggleSelect(this)"><div class="letter">2</div><div class="content"><h3>单机独占</h3><p>一台电脑同一时刻仅领取一个岗位任务；任务结束、停止或超时后才能领取下一个。</p></div></div>
+    <div class="option selected" data-choice="dedupe" onclick="toggleSelect(this)"><div class="letter">3</div><div class="content"><h3>全局去重</h3><p>所有电脑在问候前向平台申请候选人发送锁；已被任意账号联系过的人默认不再重复发送。</p></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>建议的首版交付范围</h3>
+  <div class="pros-cons">
+    <div class="pros"><h4>首版必须完成</h4><ul><li>四模块导航与响应式页面</li><li>Agent 注册、心跳、账号别名、登录状态</li><li>机器选岗、启动、暂停、停止与任务独占</li><li>JD 生成评分草案并人工确认</li><li>候选人阶段、评分明细、发送记录</li><li>简历上传、自动归档、解析、岗位关联、基础去重</li><li>全局候选人发送锁和真实限流</li></ul></div>
+    <div class="cons"><h4>后续迭代</h4><ul><li>一台电脑多 BOSS 账号切换</li><li>无人值守的多岗位自动排队</li><li>自动回复复杂对话</li><li>人才库推荐与跨岗位智能匹配</li><li>高级报表和团队权限体系</li></ul></div>
+  </div>
+</div>
+
+<p class="subtitle">下一步确认“自动发送”的安全策略：推荐达标后自动发送，但每个岗位首次运行前必须人工确认评分标准、问候语和每日上限。</p>
