@@ -26,6 +26,11 @@ services:
       WATCH_DIR: /data/inbox
       CORS_ORIGINS: "*"
       DEV_API_TOKEN: ""
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      LLM_MAX_ATTEMPTS: ${LLM_MAX_ATTEMPTS:-3}
     volumes:
       - resume_files:/data/files
     depends_on:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -15,6 +15,13 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -32,14 +39,37 @@ class UserOut(BaseModel):
     username: str
     role: str
     is_active: bool
+    must_change_password: bool
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
 
 class AdminCreateUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(min_length=2, max_length=100)
-    password: str = Field(min_length=6, max_length=128)
-    role: str = Field(default="member", pattern="^(admin|member)$")
+    temporary_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if len(normalized) < 2:
+            raise ValueError("username must contain at least 2 characters")
+        return normalized
+
+
+class UserStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: bool
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    temporary_password: str = Field(min_length=8, max_length=128)
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -119,6 +149,29 @@ class ExchangeCreate(BaseModel):
 
 class ExchangeBlockedOut(BaseModel):
     blocked: bool
+
+
+class ScoreEvaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    jd: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+
+    @field_validator("jd", "summary")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be blank")
+        return value
+
+
+class ScoreEvaluateOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: int = Field(ge=0, le=100)
+    reason: str
+    evidence: list[str]
+    model: str
 
 
 class ScoreEventCreate(BaseModel):

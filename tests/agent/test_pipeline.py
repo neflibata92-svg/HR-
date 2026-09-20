@@ -6,9 +6,16 @@ from resume_agent.pipeline import process_candidate
 class FakeScorer:
     def __init__(self, score: int) -> None:
         self.score = score
+        self.called = False
 
     def score_candidate(self, jd: str, summary: str) -> LlmScoreResult:
-        return LlmScoreResult(score=self.score, reason="ok", evidence=["x"])
+        self.called = True
+        return LlmScoreResult(
+            score=self.score,
+            reason="ok",
+            evidence=["x"],
+            model="server-model",
+        )
 
 
 class FakeGreeter:
@@ -45,11 +52,13 @@ def test_pipeline_greets_when_score_high() -> None:
         greeter=greeter,
     )
     assert result.action == "greeted"
+    assert result.model == "server-model"
     assert greeter.called is True
 
 
 def test_pipeline_hard_filter() -> None:
     bad = RawCandidate("2", "赵", "公司", 40, 4, 2, 4)
+    scorer = FakeScorer(99)
     result = process_candidate(
         bad,
         jd_text="JD",
@@ -57,8 +66,9 @@ def test_pipeline_hard_filter() -> None:
         greet_template="hi",
         exchanged_within_30_days=False,
         already_greeted=False,
-        scorer=FakeScorer(99),
+        scorer=scorer,
         greeter=None,
     )
     assert result.action == "hard_filter_reject"
     assert "age" in result.reasons
+    assert scorer.called is False

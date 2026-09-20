@@ -25,6 +25,7 @@ class ProcessResult:
     action: str
     reasons: list[str]
     score: int | None = None
+    model: str = ""
 
 
 def process_candidate(
@@ -68,8 +69,14 @@ def process_candidate(
             action="below_threshold",
             reasons=[scored.reason],
             score=scored.score,
+            model=scored.model,
         )
 
     if greeter is not None:
         greeter.greet(candidate, greet_template)
-    return ProcessResult(action="greeted", reasons=[scored.reason], score=scored.score)
+    return ProcessResult(
+        action="greeted",
+        reasons=[scored.reason],
+        score=scored.score,
+        model=scored.model,
+    )

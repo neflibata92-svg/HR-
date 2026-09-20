@@ -13,6 +13,7 @@ class LlmScoreResult(BaseModel):
     score: int = Field(ge=0, le=100)
     reason: str
     evidence: list[str] = Field(default_factory=list)
+    model: str = ""
 
 
 def parse_llm_score_payload(raw: str) -> LlmScoreResult:

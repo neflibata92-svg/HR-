@@ -7,13 +7,16 @@ from typing import Any
 
 import httpx
 
+from resume_domain.llm_schema import LlmScoreResult
 from resume_agent.config import AgentSettings
 
 
 class ApiClient:
     def __init__(self, settings: AgentSettings) -> None:
+        if not settings.api_key.strip():
+            raise ValueError("API_KEY is required; create a personal Agent API Key in the web console")
         self.settings = settings
-        self._headers = {"X-Api-Key": settings.api_key or settings.api_token}
+        self._headers = {"X-Api-Key": settings.api_key}
 
     def _url(self, path: str) -> str:
         return f"{self.settings.api_base_url.rstrip('/')}{path}"
@@ -42,6 +45,16 @@ class ApiClient:
             )
             response.raise_for_status()
             return bool(response.json()["blocked"])
+
+    def score_candidate(self, jd: str, summary: str) -> LlmScoreResult:
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                self._url("/api/scoring/evaluate"),
+                headers=self._headers,
+                json={"jd": jd, "summary": summary},
+            )
+            response.raise_for_status()
+            return LlmScoreResult.model_validate(response.json())
 
     def post_score(self, payload: dict[str, Any]) -> dict[str, Any]:
         with httpx.Client(timeout=30.0) as client:

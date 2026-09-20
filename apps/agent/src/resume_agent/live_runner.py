@@ -10,8 +10,7 @@ from resume_agent.api_client import ApiClient
 from resume_agent.boss_live import BossLiveSession, RiskPageError
 from resume_agent.browser import first_page, open_persistent_browser, save_failure_screenshot
 from resume_agent.config import AgentSettings
-from resume_agent.llm import LlmScorer
-from resume_agent.pipeline import process_candidate
+from resume_agent.pipeline import Scorer, process_candidate
 from resume_agent.rate_limit import sleep_action_delay
 from resume_agent.selectors import BossSelectors, load_boss_selectors
 
@@ -41,7 +40,7 @@ def run_login(settings: AgentSettings, selectors: BossSelectors | None = None) -
 def run_live_round(
     settings: AgentSettings,
     api: ApiClient,
-    scorer: LlmScorer,
+    scorer: Scorer,
     *,
     selectors: BossSelectors | None = None,
     entry_url: str = "",
@@ -130,14 +129,13 @@ def run_live_round(
                     {
                         "candidate_id": upserted["id"],
                         "job_id": job["id"],
-                        "hard_filter_passed": result.action
-                        not in {"hard_filter_reject", "score_error", "skip_already_greeted"},
+                        "hard_filter_passed": result.action != "hard_filter_reject",
                         "hard_filter_reasons": result.reasons
                         if result.action == "hard_filter_reject"
                         else [],
                         "score": result.score,
                         "reason": ";".join(result.reasons),
-                        "model": settings.llm_model,
+                        "model": result.model,
                     }
                 )
                 if result.action == "greeted":

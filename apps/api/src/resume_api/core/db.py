@@ -35,8 +35,10 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """创建全部表。"""
+    """创建全部表并升级已有数据库结构。"""
 
     from resume_api import models  # noqa: F401
+    from resume_api.migrations.runner import run_migrations
 
     Base.metadata.create_all(bind=engine)
+    run_migrations(engine)

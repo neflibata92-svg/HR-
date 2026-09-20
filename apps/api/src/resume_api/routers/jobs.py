@@ -5,12 +5,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import get_current_user
+from resume_api.core.auth import require_password_change_complete
 from resume_api.core.db import get_db
 from resume_api.schemas import JobCreate, JobOut, JobUpdate
 from resume_api.services import jobs as jobs_service
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/api/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(require_password_change_complete)],
+)
 
 
 @router.get("", response_model=list[JobOut])

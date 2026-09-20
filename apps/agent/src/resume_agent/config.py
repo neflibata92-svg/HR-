@@ -10,11 +10,6 @@ class AgentSettings(BaseSettings):
 
     api_base_url: str = "http://127.0.0.1:8000"
     api_key: str = ""
-    # 兼容旧字段；优先 api_key
-    api_token: str = ""
-    llm_base_url: str = "https://api.openai.com/v1"
-    llm_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
     machine_id: str = "local-pc"
     browser_user_data_dir: str = "./data/browser-profile"
     browser_channel: str = "chrome"

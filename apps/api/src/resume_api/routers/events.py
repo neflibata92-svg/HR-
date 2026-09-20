@@ -6,13 +6,17 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import get_current_user
+from resume_api.core.auth import require_password_change_complete
 from resume_api.core.db import get_db
 from resume_api.models import OutreachEvent
 from resume_api.schemas import OutreachCreate, OutreachOut, ScoreEventCreate, ScoreEventOut
 from resume_api.services import events as events_service
 
-router = APIRouter(prefix="/api/events", tags=["events"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/api/events",
+    tags=["events"],
+    dependencies=[Depends(require_password_change_complete)],
+)
 
 
 @router.post("/scores", response_model=ScoreEventOut)

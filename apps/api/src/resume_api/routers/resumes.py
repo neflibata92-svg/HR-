@@ -8,13 +8,17 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
-from resume_api.core.auth import get_current_user
+from resume_api.core.auth import require_password_change_complete
 from resume_api.core.config import Settings, get_settings
 from resume_api.core.db import get_db
 from resume_api.schemas import ResumeOut
 from resume_api.services.ingest import store_resume_file
 
-router = APIRouter(prefix="/api/resumes", tags=["resumes"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/api/resumes",
+    tags=["resumes"],
+    dependencies=[Depends(require_password_change_complete)],
+)
 
 
 @router.post("/upload", response_model=ResumeOut)

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from resume_api.core.config import ensure_data_dirs, get_settings
 from resume_api.core.db import SessionLocal, init_db
-from resume_api.routers import agent, auth, candidates, events, jobs, resumes
+from resume_api.routers import agent, auth, candidates, events, jobs, resumes, scoring
 from resume_api.services.folder_watch import FolderWatcher
 
 _watcher: FolderWatcher | None = None
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     application.include_router(events.router)
     application.include_router(resumes.router)
     application.include_router(agent.router)
+    application.include_router(scoring.router)
 
     @application.get("/health")
     def health() -> dict[str, str]:
