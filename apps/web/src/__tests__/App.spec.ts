@@ -115,6 +115,18 @@ describe("App authentication flow", () => {
     expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
   });
 
+  it("clears tokens and returns to login when an authenticated API reports 401", async () => {
+    const wrapper = await mountWithToken();
+    sessionStorage.setItem("refresh_token", "existing-refresh");
+
+    window.dispatchEvent(new Event("resume-screening:unauthorized"));
+    await wrapper.vm.$nextTick();
+
+    expect(sessionStorage.getItem("access_token")).toBeNull();
+    expect(sessionStorage.getItem("refresh_token")).toBeNull();
+    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+  });
+
   it("stores login tokens before confirming the current user", async () => {
     vi.mocked(api.me).mockResolvedValue(member);
     const wrapper = mount(App);

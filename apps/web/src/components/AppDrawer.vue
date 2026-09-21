@@ -84,7 +84,7 @@ onBeforeUnmount(() => previousFocus?.focus());
             :aria-label="`关闭${props.title}`"
             @click="emit('close')"
           >
-            关闭
+            <span aria-hidden="true">×</span>
           </button>
         </header>
         <div class="drawer-content">

@@ -4,7 +4,19 @@ export type Job = {
   jd_text: string;
   score_threshold: number;
   greet_template: string;
+  boss_entry_url: string;
+  hourly_greet_limit: number;
+  min_action_delay_ms: number;
+  max_action_delay_ms: number;
   enabled: boolean;
+  created_at: string | null;
+};
+
+export type JobWrite = {
+  name: string;
+  jd_text: string;
+  score_threshold: number;
+  greet_template: string;
 };
 
 export type Candidate = {
@@ -14,6 +26,19 @@ export type Candidate = {
   fingerprint: string;
   age: number | null;
   years_of_experience: number | null;
+  job_segments_json: string;
+  source: string;
+  created_at: string | null;
+};
+
+export type Resume = {
+  id: number;
+  candidate_id: number | null;
+  file_path: string;
+  parsed_text: string;
+  source: string;
+  parse_status: string;
+  created_at: string | null;
 };
 
 export type AgentRun = {
@@ -50,6 +75,10 @@ export type ApiKeyRow = {
   revoked_at?: string | null;
 };
 
+export type ApiKeyCreated = ApiKeyRow & {
+  api_key: string;
+};
+
 function accessToken(): string {
   return sessionStorage.getItem("access_token") || "";
 }
@@ -79,6 +108,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      window.dispatchEvent(new Event("resume-screening:unauthorized"));
+    }
     throw new Error(`${response.status} ${await response.text()}`);
   }
   return (await response.json()) as T;
@@ -138,7 +170,7 @@ export function listApiKeys(): Promise<ApiKeyRow[]> {
   return request<ApiKeyRow[]>("/auth/api-keys");
 }
 
-export function createApiKey(name: string): Promise<ApiKeyRow & { api_key: string }> {
+export function createApiKey(name: string): Promise<ApiKeyCreated> {
   return request("/auth/api-keys", {
     method: "POST",
     body: JSON.stringify({ name }),
@@ -153,13 +185,12 @@ export function listJobs(): Promise<Job[]> {
   return request<Job[]>("/api/jobs");
 }
 
-export function createJob(payload: {
-  name: string;
-  jd_text: string;
-  score_threshold: number;
-  greet_template: string;
-}): Promise<Job> {
+export function createJob(payload: JobWrite): Promise<Job> {
   return request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateJob(id: number, payload: Partial<JobWrite> & { enabled?: boolean }): Promise<Job> {
+  return request<Job>(`/api/jobs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 export function listCandidates(q: string): Promise<Candidate[]> {
@@ -174,11 +205,14 @@ export function markExchange(candidateId: number, operator: string): Promise<{ i
   });
 }
 
-export async function uploadResume(file: File): Promise<unknown> {
+export async function uploadResume(file: File, candidateId?: number): Promise<Resume> {
   const form = new FormData();
   form.append("file", file);
   form.append("source", "upload");
-  return request("/api/resumes/upload", { method: "POST", body: form });
+  if (candidateId !== undefined) {
+    form.append("candidate_id", String(candidateId));
+  }
+  return request<Resume>("/api/resumes/upload", { method: "POST", body: form });
 }
 
 export function listAgentRuns(): Promise<AgentRun[]> {

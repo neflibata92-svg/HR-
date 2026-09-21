@@ -12,6 +12,44 @@ vi.mock("../../api", async () => {
 describe("LoginPage", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    localStorage.clear();
+  });
+
+  it("restores the original secure login structure and password controls", async () => {
+    const wrapper = mount(LoginPage);
+
+    expect(wrapper.text()).toContain("FIND.");
+    expect(wrapper.text()).toContain("SCORE.");
+    expect(wrapper.text()).toContain("CONNECT.");
+    expect(wrapper.text()).toContain("SECURE WORKSPACE");
+    expect(wrapper.text()).not.toContain("输入任意账号即可进入");
+
+    const password = wrapper.get<HTMLInputElement>('[aria-label="密码"]');
+    expect(password.attributes("type")).toBe("password");
+    await wrapper.get('[aria-label="显示密码"]').trigger("click");
+    expect(password.attributes("type")).toBe("text");
+
+    await wrapper.get('[aria-label="忘记密码"]').trigger("click");
+    expect(wrapper.text()).toContain("请联系企业管理员");
+  });
+
+  it("remembers only the username when requested", async () => {
+    vi.mocked(api.login).mockResolvedValue({
+      access_token: "access",
+      refresh_token: "refresh",
+      token_type: "bearer",
+    });
+    const wrapper = mount(LoginPage);
+
+    await wrapper.get('[aria-label="用户名"]').setValue(" hr.one ");
+    await wrapper.get('[aria-label="密码"]').setValue("safePass8");
+    await wrapper.get('[aria-label="记住账号"]').setValue(true);
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+
+    expect(localStorage.getItem("leion-hr:remembered-username")).toBe("hr.one");
+    expect(localStorage.getItem("password")).toBeNull();
+    expect(localStorage.getItem("access_token")).toBeNull();
   });
 
   it("submits trimmed credentials and emits tokens", async () => {

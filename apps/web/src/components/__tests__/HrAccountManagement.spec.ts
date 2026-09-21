@@ -32,13 +32,45 @@ const member = {
   created_at: "2026-09-20T11:00:00Z",
 };
 
+function mountManagement() {
+  return mount(HrAccountManagement, { global: { stubs: { teleport: true } } });
+}
+
 describe("HrAccountManagement", () => {
   beforeEach(() => {
     vi.mocked(api.listUsers).mockResolvedValue([admin, member]);
   });
 
+  it("retries a failed account list request", async () => {
+    vi.mocked(api.listUsers)
+      .mockRejectedValueOnce(new Error("users unavailable"))
+      .mockResolvedValueOnce([admin, member]);
+    const wrapper = mount(HrAccountManagement, { global: { stubs: { teleport: true } } });
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toContain("users unavailable");
+    await wrapper.get('[aria-label="重试加载 HR 账号"]').trigger("click");
+    await flushPromises();
+
+    expect(api.listUsers).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("lisi");
+  });
+
+  it("shows validation errors inside the active account drawer", async () => {
+    const wrapper = mount(HrAccountManagement, { global: { stubs: { teleport: true } } });
+    await flushPromises();
+    await wrapper.get('[aria-label="新增 HR"]').trigger("click");
+    await wrapper.get('[aria-label="用户名"]').setValue("wang.hr");
+    await wrapper.get('[aria-label="临时密码"]').setValue("tempPass8");
+    await wrapper.get('[aria-label="确认密码"]').setValue("different8");
+    await wrapper.get("form").trigger("submit");
+
+    expect(wrapper.get('[role="dialog"] [role="alert"]').text()).toContain("两次输入的密码不一致");
+    expect(wrapper.get('[role="dialog"]').classes()).toContain("app-drawer");
+  });
+
   it("shows roles and never offers admin operations", async () => {
-    const wrapper = mount(HrAccountManagement);
+    const wrapper = mountManagement();
     await flushPromises();
 
     expect(wrapper.text()).toContain("HR 总负责人");
@@ -48,7 +80,7 @@ describe("HrAccountManagement", () => {
   });
 
   it("validates create confirmation before calling the API", async () => {
-    const wrapper = mount(HrAccountManagement);
+    const wrapper = mountManagement();
     await flushPromises();
     await wrapper.get('[aria-label="新增 HR"]').trigger("click");
     await wrapper.get('[aria-label="用户名"]').setValue("wang.hr");
@@ -62,7 +94,7 @@ describe("HrAccountManagement", () => {
 
   it("does not change local status when disable fails or is cancelled", async () => {
     vi.mocked(api.setUserStatus).mockRejectedValueOnce(new Error("network error"));
-    const wrapper = mount(HrAccountManagement);
+    const wrapper = mountManagement();
     await flushPromises();
 
     await wrapper.get('[aria-label="停用 lisi"]').trigger("click");
@@ -77,7 +109,7 @@ describe("HrAccountManagement", () => {
   });
 
   it("validates password reset confirmation before calling the API", async () => {
-    const wrapper = mount(HrAccountManagement);
+    const wrapper = mountManagement();
     await flushPromises();
 
     await wrapper.get('[aria-label="重置 lisi 密码"]').trigger("click");
@@ -93,7 +125,7 @@ describe("HrAccountManagement", () => {
     vi.mocked(api.listUsers).mockResolvedValueOnce([{ ...admin }, { ...member, is_active: false }]);
     vi.mocked(api.setUserStatus).mockResolvedValue({ ...member, is_active: true });
     vi.mocked(api.resetUserPassword).mockResolvedValue({ ...member, must_change_password: true });
-    const wrapper = mount(HrAccountManagement);
+    const wrapper = mountManagement();
     await flushPromises();
 
     await wrapper.get('[aria-label="重新启用 lisi"]').trigger("click");

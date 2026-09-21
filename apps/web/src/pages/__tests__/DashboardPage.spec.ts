@@ -14,6 +14,25 @@ describe("DashboardPage", () => {
     vi.resetAllMocks();
   });
 
+  it("keeps every original dashboard module while unsupported values stay honest", async () => {
+    vi.mocked(api.listAgentRuns).mockResolvedValue([]);
+    const wrapper = mount(DashboardPage);
+    await flushPromises();
+
+    for (const text of [
+      "FIND.", "SCORE.", "CONNECT.", "Active Mission", "今日发现", "评分达标",
+      "问候成功", "收到简历", "实时任务流", "200 次 / 天",
+    ]) {
+      expect(wrapper.text()).toContain(text);
+    }
+    expect(wrapper.findAll(".metric-value")).toHaveLength(4);
+    expect(wrapper.findAll(".metric-value").every((node) => node.text() === "—")).toBe(true);
+    expect(wrapper.get('[aria-label="暂停任务"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[aria-label="停止任务"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("用量接口暂未接入");
+    expect(wrapper.text()).not.toMatch(/326|148|126|37|王女士|李先生/);
+  });
+
   it("shows real agent status without invented dashboard metrics", async () => {
     vi.mocked(api.listAgentRuns).mockResolvedValue([
       {

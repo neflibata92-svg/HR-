@@ -1,11 +1,17 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../../api";
 import AppDrawer from "../../components/AppDrawer.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import StatusBadge from "../../components/StatusBadge.vue";
 import AppShell from "../AppShell.vue";
 import type { UserMe } from "../../api";
+
+vi.mock("../../api", async () => {
+  const actual = await vi.importActual<typeof import("../../api")>("../../api");
+  return { ...actual, listAgentRuns: vi.fn() };
+});
 
 const member: UserMe = {
   id: 2,
@@ -16,8 +22,45 @@ const member: UserMe = {
 };
 
 describe("AppShell", () => {
-  it("switches among all five pages and logs out", async () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(api.listAgentRuns).mockRejectedValue(new Error("agent unavailable"));
+  });
+
+  it("restores the original shell with honest connection placeholders", async () => {
     const wrapper = mount(AppShell, { props: { user: member } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("RECRUITING AUTOMATION");
+    expect(wrapper.text()).toContain("01");
+    expect(wrapper.text()).toContain("05");
+    expect(wrapper.text()).toContain("CURRENT DEVICE");
+    expect(wrapper.text()).toContain("BOSS ACCOUNT");
+    expect(wrapper.text()).toContain("状态未知");
+    expect(wrapper.get('[aria-label="重试 Agent 状态"] .connection-dot').classes()).toContain("connection-dot--unknown");
+    expect(wrapper.text()).toContain("状态暂未接入");
+    expect(wrapper.text()).toContain("BEYOND THE RESUME");
+    expect(wrapper.get(".user-menu").text()).toContain("ME");
+  });
+
+  it("retries the Agent summary after a failed request", async () => {
+    const wrapper = mount(AppShell, { props: { user: member } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("状态未知");
+    const callsBeforeRetry = vi.mocked(api.listAgentRuns).mock.calls.length;
+    vi.mocked(api.listAgentRuns).mockResolvedValue([{ machine_id: "mac-studio", status: "online" } as never]);
+    await wrapper.get('[aria-label="重试 Agent 状态"]').trigger("click");
+    await flushPromises();
+
+    expect(api.listAgentRuns).toHaveBeenCalledTimes(callsBeforeRetry + 1);
+    expect(wrapper.text()).toContain("mac-studio");
+  });
+
+  it("switches among all five pages and logs out", async () => {
+    vi.mocked(api.listAgentRuns).mockResolvedValue([]);
+    const wrapper = mount(AppShell, { props: { user: member } });
+    await flushPromises();
     const expected = [
       ["工作台", "dashboard-page"],
       ["岗位管理", "jobs-page"],
@@ -88,10 +131,14 @@ describe("shared interface components", () => {
     const empty = mount(EmptyState, {
       props: { title: "暂无岗位", description: "创建岗位后会显示在这里。" },
     });
+    const unavailable = mount(EmptyState, {
+      props: { title: "统计暂未提供", description: "后端接口暂未接入。", kind: "unavailable" },
+    });
     const status = mount(StatusBadge, { props: { label: "在线", tone: "success" } });
 
     expect(empty.text()).toContain("暂无岗位");
     expect(empty.text()).toContain("创建岗位后会显示在这里。");
+    expect(unavailable.classes()).toContain("empty-state--unavailable");
     expect(status.text()).toBe("在线");
     expect(status.classes()).toContain("status-badge--success");
   });

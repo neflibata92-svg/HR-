@@ -51,34 +51,62 @@ onMounted(() => void loadRuns());
 </script>
 
 <template>
-  <section class="page" data-testid="dashboard-page" data-page-panel>
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">OVERVIEW</p>
-        <h1>工作台</h1>
-        <p class="muted">查看真实 Agent 设备状态与当前系统能力。</p>
-      </div>
-    </header>
+  <section class="dashboard-page page" data-testid="dashboard-page" data-page-panel>
+    <div class="page-kicker">WORKSPACE / LIVE CONTROL</div>
 
-    <div class="dashboard-grid">
-      <article class="panel quota-card">
-        <p class="eyebrow">每日招呼额度</p>
-        <h2>每位 HR 每日 200 次，全岗位共享</h2>
-        <p class="muted">已使用量与剩余量的统计接口暂未提供。</p>
+    <section class="dashboard-hero">
+      <div class="dashboard-hero-copy">
+        <p class="eyebrow">RECRUITING INTELLIGENCE</p>
+        <h1>FIND.<br /><em>SCORE.</em><br />CONNECT.</h1>
+        <p>让人才发现、智能判断与真实沟通自然流动。</p>
+      </div>
+      <article class="mission-control">
+        <div>
+          <p class="eyebrow">Active Mission</p>
+          <h2>招聘任务控制台</h2>
+          <p>任务状态与控制接口暂未接入，当前不会伪造运行结果。</p>
+        </div>
+        <div class="mission-actions">
+          <button type="button" aria-label="暂停任务" disabled>暂停任务</button>
+          <button type="button" aria-label="停止任务" disabled>停止任务</button>
+        </div>
       </article>
-      <article class="panel">
-        <h2>招聘统计</h2>
-        <EmptyState title="统计接口暂未提供" description="接入后将在这里展示真实招聘指标。" />
+    </section>
+
+    <section class="dashboard-metrics" aria-label="招聘统计">
+      <article v-for="label in ['今日发现', '评分达标', '问候成功', '收到简历']" :key="label" class="metric">
+        <span>{{ label }}</span>
+        <strong class="metric-value">—</strong>
+        <small>统计接口暂未提供</small>
       </article>
-      <article class="panel">
-        <h2>实时动态</h2>
-        <EmptyState title="动态接口暂未提供" description="当前不会用演示活动替代真实记录。" />
+    </section>
+
+    <section class="dashboard-lower">
+      <article class="panel activity-panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">LIVE ACTIVITY</p><h2>实时任务流</h2></div>
+        </div>
+        <EmptyState kind="unavailable" title="实时动态暂未接入" description="动态接口暂未提供，当前不会用演示活动替代真实记录。" />
       </article>
-      <article class="panel">
-        <h2>任务控制</h2>
-        <EmptyState title="任务控制接口暂未提供" description="当前页面不会伪造启动或暂停操作。" />
+
+      <article class="quota-card">
+        <p class="eyebrow">DAILY SHARED QUOTA</p>
+        <h2>每日招呼额度</h2>
+        <strong>200 次 / 天</strong>
+        <p>每位 HR 每日 200 次，全岗位共享。</p>
+        <div class="quota-values">
+          <span>今日已用 <b>—</b></span>
+          <span>今日剩余 <b>—</b></span>
+          <span>使用比例 <b>—</b></span>
+        </div>
+        <small>用量接口暂未接入</small>
       </article>
-    </div>
+    </section>
+
+    <article class="panel task-control-boundary">
+      <div><p class="eyebrow">TASK CONTROL</p><h2>任务控制</h2></div>
+      <p>任务控制接口暂未提供，当前页面不会伪造启动或暂停操作。</p>
+    </article>
 
     <article class="panel agent-panel">
       <div class="section-heading">

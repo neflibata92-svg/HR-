@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import { clearTokens, isLoggedIn, me, setTokens, type UserMe } from "./api";
 import FirstPasswordChange from "./components/FirstPasswordChange.vue";
@@ -40,9 +40,14 @@ function onLogout(): void {
 }
 
 onMounted(() => {
+  window.addEventListener("resume-screening:unauthorized", onLogout);
   if (isLoggedIn()) {
     void loadCurrentUser();
   }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resume-screening:unauthorized", onLogout);
 });
 </script>
 
