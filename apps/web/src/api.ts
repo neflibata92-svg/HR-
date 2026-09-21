@@ -17,9 +17,11 @@ export type Candidate = {
 };
 
 export type AgentRun = {
+  id: number;
   machine_id: string;
   status: string;
   last_error: string;
+  last_heartbeat: string | null;
 };
 
 export type UserMe = {
