@@ -9,6 +9,13 @@ PROTOTYPE = (
 )
 
 
+def test_prototype_has_no_remote_dependencies() -> None:
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "https://" not in html
+    assert "http://" not in html
+
+
 def test_login_and_logout_flow() -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
