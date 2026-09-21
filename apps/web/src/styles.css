@@ -140,6 +140,59 @@ button:disabled {
   width: min(100%, 460px);
 }
 
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+}
+
+.login-story,
+.login-form-panel {
+  padding: clamp(2rem, 6vw, 5rem);
+}
+
+.login-story {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: white;
+  background: linear-gradient(145deg, #090e80, #5934c8 62%, #00a6a6);
+}
+
+.login-story h1 {
+  font-size: clamp(3rem, 7vw, 6.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+}
+
+.login-story em {
+  color: #8ef1e8;
+  font-style: normal;
+}
+
+.login-form-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--card);
+}
+
+.form-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.account-note {
+  margin-top: 1rem;
+}
+
+.session-error {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -160,6 +213,14 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-story {
+    min-height: 42vh;
+  }
+
   .layout {
     padding-inline: 0.75rem;
   }

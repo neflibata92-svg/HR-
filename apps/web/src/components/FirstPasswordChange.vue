@@ -26,7 +26,12 @@ async function submit(): Promise<void> {
     const tokens = await changePassword(currentPassword.value, newPassword.value);
     emit("changed", tokens.access_token, tokens.refresh_token);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith("401")) {
+      emit("logout");
+      return;
+    }
+    error.value = message;
   } finally {
     submitting.value = false;
   }

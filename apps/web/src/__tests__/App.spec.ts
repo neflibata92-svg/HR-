@@ -9,40 +9,18 @@ vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
   return {
     ...actual,
-    login: vi.fn(),
-    register: vi.fn(),
     me: vi.fn(),
     changePassword: vi.fn(),
-    listUsers: vi.fn(),
-    listJobs: vi.fn(),
-    listCandidates: vi.fn(),
-    listAgentRuns: vi.fn(),
-    listApiKeys: vi.fn(),
   };
 });
 
-const member = {
+const member: UserMe = {
   id: 2,
   username: "member.hr",
-  role: "member" as const,
+  role: "member",
   is_active: true,
   must_change_password: false,
 };
-
-const admin = {
-  ...member,
-  id: 1,
-  username: "admin.hr",
-  role: "admin" as const,
-};
-
-function mockEmptyWorkspace(): void {
-  vi.mocked(api.listJobs).mockResolvedValue([]);
-  vi.mocked(api.listCandidates).mockResolvedValue([]);
-  vi.mocked(api.listAgentRuns).mockResolvedValue([]);
-  vi.mocked(api.listApiKeys).mockResolvedValue([]);
-  vi.mocked(api.listUsers).mockResolvedValue([]);
-}
 
 async function mountWithToken(user: UserMe = member) {
   sessionStorage.setItem("access_token", "existing-access");
@@ -56,46 +34,34 @@ describe("App authentication flow", () => {
   beforeEach(() => {
     sessionStorage.clear();
     vi.resetAllMocks();
-    mockEmptyWorkspace();
   });
 
   it("shows only login when there is no token", async () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).not.toContain("创建岗位");
+    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="authenticated-app"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("注册");
     expect(api.me).not.toHaveBeenCalled();
-    expect(api.listJobs).not.toHaveBeenCalled();
   });
 
-  it("loads a member workspace without account management", async () => {
-    const wrapper = await mountWithToken(member);
+  it("shows the authenticated application after confirming the user", async () => {
+    const wrapper = await mountWithToken();
 
-    expect(wrapper.text()).toContain("创建岗位");
-    expect(wrapper.text()).not.toContain("HR 账号管理");
-    expect(api.listUsers).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="authenticated-app"]').text()).toContain("member.hr");
+    expect(wrapper.find('[data-testid="login-page"]').exists()).toBe(false);
   });
 
-  it("shows account management only for an admin", async () => {
-    const wrapper = await mountWithToken(admin);
-
-    expect(wrapper.text()).toContain("HR 账号管理");
-    expect(api.listUsers).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows only password change and skips workspace requests when required", async () => {
+  it("shows only password change when required", async () => {
     const wrapper = await mountWithToken({ ...member, must_change_password: true });
 
     expect(wrapper.text()).toContain("请先修改初始密码");
-    expect(wrapper.text()).not.toContain("创建岗位");
-    expect(api.listJobs).not.toHaveBeenCalled();
-    expect(api.listCandidates).not.toHaveBeenCalled();
-    expect(api.listAgentRuns).not.toHaveBeenCalled();
-    expect(api.listApiKeys).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="authenticated-app"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="login-page"]').exists()).toBe(false);
   });
 
-  it("stores changed tokens, confirms user state, then loads workspace", async () => {
+  it("stores changed tokens and confirms user state again", async () => {
     sessionStorage.setItem("access_token", "old-access");
     vi.mocked(api.me)
       .mockResolvedValueOnce({ ...member, must_change_password: true })
@@ -117,11 +83,26 @@ describe("App authentication flow", () => {
     expect(sessionStorage.getItem("access_token")).toBe("new-access");
     expect(sessionStorage.getItem("refresh_token")).toBe("new-refresh");
     expect(api.me).toHaveBeenCalledTimes(2);
-    expect(api.listJobs).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("创建岗位");
+    expect(wrapper.get('[data-testid="authenticated-app"]').text()).toContain("member.hr");
   });
 
-  it("clears invalid tokens when current-user loading returns 401", async () => {
+  it("shows a retryable error when current-user loading fails", async () => {
+    sessionStorage.setItem("access_token", "existing-access");
+    vi.mocked(api.me)
+      .mockRejectedValueOnce(new Error("503 service unavailable"))
+      .mockResolvedValueOnce(member);
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toContain("503 service unavailable");
+    expect(wrapper.find('[data-testid="login-page"]').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="重试确认登录状态"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[data-testid="authenticated-app"]').exists()).toBe(true);
+  });
+
+  it("clears invalid tokens and returns to login on a 401", async () => {
     sessionStorage.setItem("access_token", "expired-access");
     sessionStorage.setItem("refresh_token", "expired-refresh");
     vi.mocked(api.me).mockRejectedValue(new Error("401 unauthorized"));
@@ -130,7 +111,19 @@ describe("App authentication flow", () => {
 
     expect(sessionStorage.getItem("access_token")).toBeNull();
     expect(sessionStorage.getItem("refresh_token")).toBeNull();
-    expect(wrapper.text()).toContain("登录");
-    expect(api.listJobs).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+  });
+
+  it("stores login tokens before confirming the current user", async () => {
+    vi.mocked(api.me).mockResolvedValue(member);
+    const wrapper = mount(App);
+
+    await wrapper.getComponent({ name: "LoginPage" }).vm.$emit("authenticated", "access", "refresh");
+    await flushPromises();
+
+    expect(sessionStorage.getItem("access_token")).toBe("access");
+    expect(sessionStorage.getItem("refresh_token")).toBe("refresh");
+    expect(api.me).toHaveBeenCalledTimes(1);
+    expect(wrapper.get('[data-testid="authenticated-app"]').exists()).toBe(true);
   });
 });

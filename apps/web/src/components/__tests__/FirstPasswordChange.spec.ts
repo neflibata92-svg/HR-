@@ -42,6 +42,18 @@ describe("FirstPasswordChange", () => {
     expect(wrapper.text()).toContain("current password is incorrect");
   });
 
+  it("emits logout when the password-change session is unauthorized", async () => {
+    vi.mocked(api.changePassword).mockRejectedValue(new Error("401 unauthorized"));
+    const wrapper = mount(FirstPasswordChange);
+    await wrapper.get('[aria-label="当前密码"]').setValue("tempPass8");
+    await wrapper.get('[aria-label="新密码"]').setValue("newPass88");
+    await wrapper.get('[aria-label="确认新密码"]').setValue("newPass88");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+
+    expect(wrapper.emitted("logout")).toHaveLength(1);
+  });
+
   it("emits new tokens on success and supports logout", async () => {
     vi.mocked(api.changePassword).mockResolvedValue({
       access_token: "new-access",
