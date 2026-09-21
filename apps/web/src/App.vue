@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 
 import { clearTokens, isLoggedIn, me, setTokens, type UserMe } from "./api";
 import FirstPasswordChange from "./components/FirstPasswordChange.vue";
+import AppShell from "./layouts/AppShell.vue";
 import LoginPage from "./pages/LoginPage.vue";
 
 const user = ref<UserMe | null>(null);
@@ -54,11 +55,7 @@ onMounted(() => {
     @logout="onLogout"
   />
 
-  <main v-else-if="user" data-testid="authenticated-app">
-    <h1>LEION HR</h1>
-    <span>{{ user.username }}</span>
-    <button type="button" aria-label="退出登录" @click="onLogout">退出登录</button>
-  </main>
+  <AppShell v-else-if="user" :user="user" @logout="onLogout" />
 
   <main v-else-if="sessionError" class="session-error">
     <section class="panel">

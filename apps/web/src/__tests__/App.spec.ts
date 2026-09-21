@@ -50,6 +50,7 @@ describe("App authentication flow", () => {
     const wrapper = await mountWithToken();
 
     expect(wrapper.get('[data-testid="authenticated-app"]').text()).toContain("member.hr");
+    expect(wrapper.getComponent({ name: "AppShell" }).props("user")).toEqual(member);
     expect(wrapper.find('[data-testid="login-page"]').exists()).toBe(false);
   });
 
