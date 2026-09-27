@@ -2,13 +2,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: resume
-      POSTGRES_PASSWORD: resume
-      POSTGRES_DB: resume
+      POSTGRES_USER: ${POSTGRES_USER:-resume}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 deploy/.env 设置数据库密码}
+      POSTGRES_DB: ${POSTGRES_DB:-resume}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U resume -d resume"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resume} -d ${POSTGRES_DB:-resume}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,12 +19,12 @@ services:
       dockerfile: deploy/Dockerfile.api
     environment:
       ENV: production
-      ALLOW_REGISTER: "false"
-      DATABASE_URL: postgresql+psycopg://resume:resume@db:5432/resume
-      JWT_SECRET: change-me-in-production
+      ALLOW_REGISTER: ${ALLOW_REGISTER:-false}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-resume}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-resume}
+      JWT_SECRET: ${JWT_SECRET:?请在 deploy/.env 设置随机 JWT 密钥}
       STORAGE_DIR: /data/files
       WATCH_DIR: /data/inbox
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: ${CORS_ORIGINS:?请设置管理台的 HTTPS 来源}
       DEV_API_TOKEN: ""
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_API_KEY: ${LLM_API_KEY:-}

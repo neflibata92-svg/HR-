@@ -40,7 +40,7 @@ describe("App authentication flow", () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="login-page"]')).toBeTruthy();
     expect(wrapper.find('[data-testid="authenticated-app"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("注册");
     expect(api.me).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe("App authentication flow", () => {
 
     await wrapper.get('[aria-label="重试确认登录状态"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get('[data-testid="authenticated-app"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="authenticated-app"]')).toBeTruthy();
   });
 
   it("clears invalid tokens and returns to login on a 401", async () => {
@@ -112,7 +112,7 @@ describe("App authentication flow", () => {
 
     expect(sessionStorage.getItem("access_token")).toBeNull();
     expect(sessionStorage.getItem("refresh_token")).toBeNull();
-    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="login-page"]')).toBeTruthy();
   });
 
   it("clears tokens and returns to login when an authenticated API reports 401", async () => {
@@ -124,7 +124,7 @@ describe("App authentication flow", () => {
 
     expect(sessionStorage.getItem("access_token")).toBeNull();
     expect(sessionStorage.getItem("refresh_token")).toBeNull();
-    expect(wrapper.get('[data-testid="login-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="login-page"]')).toBeTruthy();
   });
 
   it("stores login tokens before confirming the current user", async () => {
@@ -137,6 +137,6 @@ describe("App authentication flow", () => {
     expect(sessionStorage.getItem("access_token")).toBe("access");
     expect(sessionStorage.getItem("refresh_token")).toBe("refresh");
     expect(api.me).toHaveBeenCalledTimes(1);
-    expect(wrapper.get('[data-testid="authenticated-app"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="authenticated-app"]')).toBeTruthy();
   });
 });

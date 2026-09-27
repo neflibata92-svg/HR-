@@ -92,6 +92,28 @@ describe("HrAccountManagement", () => {
     expect(api.createHr).not.toHaveBeenCalled();
   });
 
+  it("creates either a member or lead account", async () => {
+    vi.mocked(api.createHr).mockResolvedValue({
+      ...member,
+      id: 3,
+      username: "lead.hr",
+      role: "lead",
+    });
+    const wrapper = mountManagement();
+    await flushPromises();
+
+    await wrapper.get('[aria-label="新增 HR"]').trigger("click");
+    await wrapper.get('[aria-label="用户名"]').setValue("lead.hr");
+    await wrapper.get('[aria-label="账号角色"]').setValue("lead");
+    await wrapper.get('[aria-label="临时密码"]').setValue("tempPass8");
+    await wrapper.get('[aria-label="确认密码"]').setValue("tempPass8");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+
+    expect(api.createHr).toHaveBeenCalledWith("lead.hr", "tempPass8", "lead");
+    expect(wrapper.text()).toContain("HR 负责人");
+  });
+
   it("does not change local status when disable fails or is cancelled", async () => {
     vi.mocked(api.setUserStatus).mockRejectedValueOnce(new Error("network error"));
     const wrapper = mountManagement();

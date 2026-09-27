@@ -16,6 +16,7 @@ const loadError = ref("");
 const error = ref("");
 const showCreate = ref(false);
 const username = ref("");
+const accountRole = ref<"member" | "lead">("member");
 const temporaryPassword = ref("");
 const passwordConfirmation = ref("");
 const pendingDisable = ref<UserRow | null>(null);
@@ -52,10 +53,11 @@ async function submitCreate(): Promise<void> {
   }
   creating.value = true;
   try {
-    const created = await createHr(username.value, temporaryPassword.value);
+    const created = await createHr(username.value, temporaryPassword.value, accountRole.value);
     users.value = [...users.value, created];
     showCreate.value = false;
     username.value = "";
+    accountRole.value = "member";
     temporaryPassword.value = "";
     passwordConfirmation.value = "";
   } catch (err) {
@@ -138,11 +140,11 @@ onMounted(() => void load());
         <tbody>
           <tr v-for="account in users" :key="account.id">
             <td>{{ account.username }}</td>
-            <td>{{ account.role === "admin" ? "HR 总负责人" : "普通 HR" }}</td>
+            <td>{{ account.role === "admin" ? "HR 总负责人" : account.role === "lead" ? "HR 负责人" : "普通 HR" }}</td>
             <td>{{ account.is_active ? "正常" : "已停用" }}</td>
             <td>{{ account.must_change_password ? "待完成" : "已完成" }}</td>
             <td class="row">
-              <template v-if="account.role === 'member'">
+              <template v-if="account.role !== 'admin'">
                 <button
                   v-if="account.is_active"
                   class="danger"
@@ -174,6 +176,14 @@ onMounted(() => void load());
     <AppDrawer :open="showCreate" title="新增 HR" @close="showCreate = false">
       <form class="grid" @submit.prevent="submitCreate">
         <label>用户名<input v-model="username" aria-label="用户名" required minlength="2" /></label>
+        <label>
+          账号角色
+          <select v-model="accountRole" aria-label="账号角色">
+            <option value="member">普通 HR</option>
+            <option value="lead">HR 负责人</option>
+          </select>
+        </label>
+        <p class="muted">HR 负责人可使用工作台，但不能进入仅总负责人可用的账号管理。</p>
         <label>临时密码<input v-model="temporaryPassword" aria-label="临时密码" type="password" required minlength="8" /></label>
         <label>确认密码<input v-model="passwordConfirmation" aria-label="确认密码" type="password" required minlength="8" /></label>
         <p v-if="error" class="error" role="alert">{{ error }}</p>

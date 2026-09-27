@@ -99,6 +99,17 @@ def require_admin(
     return user
 
 
+def require_lead_or_admin(
+    user: CurrentUser = Depends(require_password_change_complete),
+) -> CurrentUser:
+    if user.role not in {"admin", "lead"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="lead or admin required",
+        )
+    return user
+
+
 def _ensure_dev_user(db: Session) -> CurrentUser:
     user = db.scalar(select(User).where(User.username == "dev"))
     if user is None:

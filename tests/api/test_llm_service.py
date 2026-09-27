@@ -37,7 +37,9 @@ def _response(content: str) -> Mock:
 def test_uses_server_provider_config_and_parses_valid_json() -> None:
     client = Mock()
     client.post.return_value = _response(
-        '{"score": 91, "reason": "经验匹配", "evidence": ["Python"]}'
+        '{"score":91,"reason":"经验匹配","evidence":["Python"],'
+        '"missing_fields":[],"estimated_fields":[],"critical_fields":[],'
+        '"confidence":0.9,"decision":"eligible"}'
     )
 
     result = score_candidate(_settings(), "Python JD", "候选人摘要", client=client)
@@ -52,13 +54,20 @@ def test_uses_server_provider_config_and_parses_valid_json() -> None:
     assert kwargs["headers"]["Authorization"] == "Bearer provider-secret-key"
     assert kwargs["json"]["model"] == "provider-model"
     assert kwargs["timeout"] == 12.0
+    messages = kwargs["json"]["messages"]
+    assert "关键资料" not in messages[0]["content"]
+    assert "关键资料" not in messages[1]["content"]
+    assert "Python JD" in messages[1]["content"]
+    assert "候选人摘要" in messages[1]["content"]
 
 
 @pytest.mark.parametrize(
     "content",
     [
         "not-json",
-        '{"score": 101, "reason": "invalid", "evidence": []}',
+        '{"score":101,"reason":"invalid","evidence":[],"missing_fields":[],'
+        '"estimated_fields":[],"critical_fields":[],"confidence":0.5,'
+        '"decision":"eligible"}',
     ],
 )
 def test_invalid_provider_payload_retries_and_becomes_safe_upstream_error(content: str) -> None:

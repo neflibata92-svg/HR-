@@ -29,13 +29,38 @@
     ".btn-send",
     "[ka*='send']"
   ],
+  "conversation_item_selectors": [
+    ".chat-list .chat-item",
+    ".conversation-list .conversation-item",
+    "[data-geekid]",
+    "[data-boss-id]"
+  ],
+  "conversation_name_selectors": [
+    ".name",
+    ".geek-name",
+    ".candidate-name"
+  ],
+  "conversation_boss_id_attributes": [
+    "data-geekid",
+    "data-boss-id"
+  ],
   "attachment_selectors": [
     "a:has-text('附件')",
     "a:has-text('简历')",
     "[class*='attach'] a",
     "a[href*='download']"
   ],
-  "risk_keywords": ["验证码", "异常访问", "安全验证", "请完成验证", "访问行为异常"],
+  "sent_message_selectors": [
+    ".message-item.item-myself",
+    ".chat-message.is-self",
+    "[class*='message'] [class*='self']"
+  ],
+  "result_page_url_keywords": ["/recommend", "/search"],
+  "login_url_keywords": ["/web/user", "/login"],
+  "login_keywords": ["请登录", "登录后继续", "扫码登录"],
+  "captcha_keywords": ["验证码", "请完成验证"],
+  "error_keywords": ["页面出错", "网络异常", "服务暂不可用"],
+  "risk_keywords": ["异常访问", "安全验证", "访问行为异常"],
   "max_cards_per_run": 30,
   "attachment_wait_seconds": 120
 }

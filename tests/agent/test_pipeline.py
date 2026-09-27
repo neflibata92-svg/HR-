@@ -4,27 +4,40 @@ from resume_agent.pipeline import process_candidate
 
 
 class FakeScorer:
-    def __init__(self, score: int) -> None:
+    def __init__(self, score: int, decision: str = "eligible") -> None:
         self.score = score
+        self.decision = decision
         self.called = False
 
-    def score_candidate(self, jd: str, summary: str) -> LlmScoreResult:
+    def score_candidate(
+        self,
+        jd: str,
+        summary: str,
+        *,
+        threshold: int,
+    ) -> LlmScoreResult:
         self.called = True
         return LlmScoreResult(
             score=self.score,
             reason="ok",
-            evidence=["x"],
+            evidence=["Python"],
+            missing_fields=["期望薪资"],
+            estimated_fields=["期望薪资"],
+            critical_fields=[],
+            confidence=0.9,
+            decision=self.decision,
             model="server-model",
         )
 
 
 class FakeGreeter:
-    def __init__(self) -> None:
+    def __init__(self, result: bool = True) -> None:
         self.called = False
+        self.result = result
 
     def greet(self, candidate: RawCandidate, message: str) -> bool:
         self.called = True
-        return True
+        return self.result
 
 
 def _ok_candidate() -> RawCandidate:
@@ -54,6 +67,37 @@ def test_pipeline_greets_when_score_high() -> None:
     assert result.action == "greeted"
     assert result.model == "server-model"
     assert greeter.called is True
+
+
+def test_pipeline_requires_a_real_greeter_before_reporting_contacted() -> None:
+    result = process_candidate(
+        _ok_candidate(),
+        jd_text="JD",
+        threshold=80,
+        greet_template="hi",
+        exchanged_within_30_days=False,
+        already_greeted=False,
+        scorer=FakeScorer(85),
+        greeter=None,
+    )
+
+    assert result.action == "eligible"
+
+
+def test_pipeline_never_greets_when_server_requires_review() -> None:
+    greeter = FakeGreeter()
+    result = process_candidate(
+        _ok_candidate(),
+        jd_text="JD",
+        threshold=80,
+        greet_template="hi",
+        exchanged_within_30_days=False,
+        already_greeted=False,
+        scorer=FakeScorer(95, decision="needs_review"),
+        greeter=greeter,
+    )
+    assert result.action == "needs_review"
+    assert greeter.called is False
 
 
 def test_pipeline_hard_filter() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,17 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_timeout_seconds: float = 60.0
     llm_max_attempts: int = 3
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.is_development:
+            return self
+        if self.jwt_secret == "change-me-jwt-secret" or len(self.jwt_secret) < 32:
+            raise ValueError("JWT_SECRET must be a non-default value of at least 32 characters")
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if "*" in origins:
+            raise ValueError("CORS_ORIGINS must list explicit production origins")
+        return self
 
     @property
     def is_development(self) -> bool:

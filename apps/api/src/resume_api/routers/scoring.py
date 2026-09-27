@@ -20,7 +20,15 @@ def evaluate(
     settings: Settings = Depends(get_settings),
 ) -> ScoreEvaluateOut:
     try:
-        result = llm_service.score_candidate(settings, payload.jd, payload.summary)
+        result = llm_service.score_candidate(
+            settings,
+            payload.jd,
+            payload.summary,
+        )
+        result = llm_service.finalize_score(
+            result,
+            threshold=payload.threshold,
+        )
     except llm_service.LlmNotConfiguredError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

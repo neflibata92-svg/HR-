@@ -11,12 +11,13 @@ def _create_ready_member(
     client,
     admin_headers: dict[str, str],
     username: str = "member",
+    role: str = "member",
 ) -> dict[str, str]:
     temporary_password = "tempPass8"
     created = client.post(
         "/auth/users",
         headers=admin_headers,
-        json={"username": username, "temporary_password": temporary_password},
+        json={"username": username, "temporary_password": temporary_password, "role": role},
     )
     assert created.status_code == 201
     login = client.post(
@@ -54,19 +55,45 @@ def test_admin_lists_and_creates_member_with_temporary_password(client) -> None:
     assert [user["username"] for user in listed.json()] == ["admin", "lisi"]
 
 
+def test_admin_creates_member_or_lead_but_not_admin(client) -> None:
+    admin_headers = _register(client, "admin")
+
+    member = client.post(
+        "/auth/users",
+        headers=admin_headers,
+        json={"username": "member-user", "temporary_password": "tempPass8"},
+    )
+    lead = client.post(
+        "/auth/users",
+        headers=admin_headers,
+        json={"username": "lead-user", "temporary_password": "tempPass8", "role": "lead"},
+    )
+    forbidden_admin = client.post(
+        "/auth/users",
+        headers=admin_headers,
+        json={"username": "other-admin", "temporary_password": "tempPass8", "role": "admin"},
+    )
+
+    assert member.status_code == 201
+    assert member.json()["role"] == "member"
+    assert lead.status_code == 201
+    assert lead.json()["role"] == "lead"
+    assert forbidden_admin.status_code == 422
+
+
 def test_admin_create_rejects_role_blank_and_normalized_duplicate(client) -> None:
     admin_headers = _register(client, "admin")
 
-    role_injection = client.post(
+    invalid_role = client.post(
         "/auth/users",
         headers=admin_headers,
         json={
-            "username": "other-admin",
+            "username": "invalid-role",
             "temporary_password": "tempPass8",
-            "role": "admin",
+            "role": "supervisor",
         },
     )
-    assert role_injection.status_code == 422
+    assert invalid_role.status_code == 422
 
     blank = client.post(
         "/auth/users",
@@ -110,6 +137,37 @@ def test_member_cannot_use_account_management_endpoints(client) -> None:
         client.post(
             f"/auth/users/{admin_id}/reset-password",
             headers=member_headers,
+            json={"temporary_password": "resetPass8"},
+        ),
+    ]
+
+    assert [response.status_code for response in responses] == [403, 403, 403, 403]
+
+
+def test_lead_cannot_use_account_management_endpoints(client) -> None:
+    admin_headers = _register(client, "admin")
+    lead_headers = _create_ready_member(client, admin_headers, username="lead", role="lead")
+    member = client.post(
+        "/auth/users",
+        headers=admin_headers,
+        json={"username": "managed", "temporary_password": "tempPass8"},
+    ).json()
+
+    responses = [
+        client.get("/auth/users", headers=lead_headers),
+        client.post(
+            "/auth/users",
+            headers=lead_headers,
+            json={"username": "blocked", "temporary_password": "tempPass8"},
+        ),
+        client.patch(
+            f"/auth/users/{member['id']}/status",
+            headers=lead_headers,
+            json={"is_active": False},
+        ),
+        client.post(
+            f"/auth/users/{member['id']}/reset-password",
+            headers=lead_headers,
             json={"temporary_password": "resetPass8"},
         ),
     ]

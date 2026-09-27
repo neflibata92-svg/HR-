@@ -101,7 +101,7 @@ def admin_create_user(db: Session, payload: AdminCreateUserRequest) -> User:
     user = User(
         username=payload.username,
         password_hash=hash_password(payload.temporary_password),
-        role="member",
+        role=payload.role,
         is_active=True,
         must_change_password=True,
     )
@@ -119,7 +119,7 @@ def _get_managed_member(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise LookupError("user not found")
-    if user.role != "member":
+    if user.role not in {"member", "lead"}:
         raise PermissionError("admin accounts cannot be managed here")
     return user
 

@@ -17,7 +17,16 @@ class BossSelectors:
     greet_button_selectors: list[str] = field(default_factory=list)
     chat_input_selectors: list[str] = field(default_factory=list)
     send_button_selectors: list[str] = field(default_factory=list)
+    conversation_item_selectors: list[str] = field(default_factory=list)
+    conversation_name_selectors: list[str] = field(default_factory=list)
+    conversation_boss_id_attributes: list[str] = field(default_factory=list)
     attachment_selectors: list[str] = field(default_factory=list)
+    sent_message_selectors: list[str] = field(default_factory=list)
+    result_page_url_keywords: list[str] = field(default_factory=list)
+    login_url_keywords: list[str] = field(default_factory=list)
+    login_keywords: list[str] = field(default_factory=list)
+    captcha_keywords: list[str] = field(default_factory=list)
+    error_keywords: list[str] = field(default_factory=list)
     risk_keywords: list[str] = field(default_factory=list)
     max_cards_per_run: int = 30
     attachment_wait_seconds: int = 120
@@ -40,7 +49,18 @@ def load_boss_selectors(path: Path | None = None) -> BossSelectors:
         greet_button_selectors=list(data.get("greet_button_selectors", [])),
         chat_input_selectors=list(data.get("chat_input_selectors", [])),
         send_button_selectors=list(data.get("send_button_selectors", [])),
+        conversation_item_selectors=list(data.get("conversation_item_selectors", [])),
+        conversation_name_selectors=list(data.get("conversation_name_selectors", [])),
+        conversation_boss_id_attributes=list(
+            data.get("conversation_boss_id_attributes", [])
+        ),
         attachment_selectors=list(data.get("attachment_selectors", [])),
+        sent_message_selectors=list(data.get("sent_message_selectors", [])),
+        result_page_url_keywords=list(data.get("result_page_url_keywords", [])),
+        login_url_keywords=list(data.get("login_url_keywords", [])),
+        login_keywords=list(data.get("login_keywords", [])),
+        captcha_keywords=list(data.get("captcha_keywords", [])),
+        error_keywords=list(data.get("error_keywords", [])),
         risk_keywords=list(data.get("risk_keywords", [])),
         max_cards_per_run=int(data.get("max_cards_per_run", 30)),
         attachment_wait_seconds=int(data.get("attachment_wait_seconds", 120)),

@@ -18,3 +18,4 @@ class AgentSettings(BaseSettings):
     selectors_path: str = ""
     open_detail_for_segments: bool = True
     wait_attachment_after_greet: bool = True
+    poll_interval_seconds: float = 15.0

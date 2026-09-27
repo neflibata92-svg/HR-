@@ -34,6 +34,8 @@ describe("AppShell", () => {
     expect(wrapper.text()).toContain("RECRUITING AUTOMATION");
     expect(wrapper.text()).toContain("01");
     expect(wrapper.text()).toContain("05");
+    expect(wrapper.text()).not.toContain("06");
+    expect(wrapper.find('[aria-label="前往复核中心"]').exists()).toBe(false);
     expect(wrapper.text()).toContain("CURRENT DEVICE");
     expect(wrapper.text()).toContain("BOSS ACCOUNT");
     expect(wrapper.text()).toContain("状态未知");
@@ -71,16 +73,38 @@ describe("AppShell", () => {
 
     for (const [label, testId] of expected) {
       await wrapper.get(`button[aria-label="前往${label}"]`).trigger("click");
-      expect(wrapper.get(`[data-testid="${testId}"]`).exists()).toBe(true);
+      expect(wrapper.get(`[data-testid="${testId}"]`)).toBeTruthy();
       expect(wrapper.findAll("[data-page-panel]")).toHaveLength(1);
     }
 
     await wrapper.get('[aria-label="前往工作台查看 Agent 状态"]').trigger("click");
-    expect(wrapper.get('[data-testid="dashboard-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="dashboard-page"]')).toBeTruthy();
     expect(wrapper.text()).toContain("LEION HR");
     expect(wrapper.text()).toContain("member.hr");
     await wrapper.get('[aria-label="退出登录"]').trigger("click");
     expect(wrapper.emitted("logout")).toHaveLength(1);
+  });
+
+  it("consumes a dashboard job target only once", async () => {
+    vi.mocked(api.listAgentRuns).mockResolvedValue([]);
+    const wrapper = mount(AppShell, {
+      props: { user: member },
+      global: {
+        stubs: {
+          DashboardPage: { template: '<button data-testid="open-job" @click="$emit(\'open-job\', 7, true)">open</button>', emits: ["open-job"] },
+          JobsPage: { props: ["targetJobId", "editTarget"], template: '<div data-testid="jobs-page">{{ targetJobId ?? "none" }}-{{ editTarget }}</div>' },
+          CandidatesPage: { template: '<div data-testid="candidates-page" />' },
+        },
+      },
+    });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="open-job"]').trigger("click");
+    expect(wrapper.get('[data-testid="jobs-page"]').text()).toBe("7-true");
+    await wrapper.get('button[aria-label="前往候选人"]').trigger("click");
+    await wrapper.get('button[aria-label="前往岗位管理"]').trigger("click");
+
+    expect(wrapper.get('[data-testid="jobs-page"]').text()).toBe("none-false");
   });
 
   it("marks the current navigation item", async () => {

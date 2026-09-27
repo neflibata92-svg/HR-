@@ -95,7 +95,10 @@ onMounted(() => void load());
       <section class="panel settings-account">
         <p class="eyebrow">ACCOUNT & CONNECTION</p>
         <h2>{{ props.user.username }}</h2>
-        <StatusBadge :label="props.user.role === 'admin' ? 'HR 总负责人' : '普通 HR'" :tone="props.user.role === 'admin' ? 'warning' : 'neutral'" />
+        <StatusBadge
+          :label="props.user.role === 'admin' ? 'HR 总负责人' : props.user.role === 'lead' ? 'HR 负责人' : '普通 HR'"
+          :tone="props.user.role === 'admin' ? 'warning' : props.user.role === 'lead' ? 'success' : 'neutral'"
+        />
         <dl class="settings-facts">
           <div><dt>BOSS 账号</dt><dd>状态暂未接入</dd></div>
           <div><dt>Agent 设备</dt><dd>请前往工作台查看真实状态</dd></div>

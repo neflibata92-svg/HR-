@@ -32,6 +32,11 @@ def test_agent_scores_only_through_backend_with_personal_system_key() -> None:
         "score": 86,
         "reason": "匹配",
         "evidence": ["Python"],
+        "missing_fields": [],
+        "estimated_fields": [],
+        "critical_fields": [],
+        "confidence": 0.9,
+        "decision": "eligible",
         "model": "server-model",
     }
     http_client = Mock()
@@ -40,13 +45,17 @@ def test_agent_scores_only_through_backend_with_personal_system_key() -> None:
     http_client.post.return_value = response
 
     with patch("resume_agent.api_client.httpx.Client", return_value=http_client):
-        result = _client().score_candidate("JD", "candidate summary")
+        result = _client().score_candidate("JD", "candidate summary", threshold=80)
 
     assert result.model == "server-model"
     call = http_client.post.call_args
     assert call.args[0] == "https://backend.example/api/scoring/evaluate"
     assert call.kwargs["headers"] == {"X-Api-Key": "personal-system-key"}
-    assert call.kwargs["json"] == {"jd": "JD", "summary": "candidate summary"}
+    assert call.kwargs["json"] == {
+        "jd": "JD",
+        "summary": "candidate summary",
+        "threshold": 80,
+    }
 
 
 @pytest.mark.parametrize("status_code", [401, 502])

@@ -1,3 +1,34 @@
+from fastapi import HTTPException
+import pytest
+
+from resume_api.core.auth import CurrentUser, require_lead_or_admin
+
+
+def test_require_lead_or_admin_accepts_privileged_roles() -> None:
+    for role in ("admin", "lead"):
+        user = CurrentUser(
+            id=1,
+            username=role,
+            role=role,
+            auth_via="jwt",
+            must_change_password=False,
+        )
+        assert require_lead_or_admin(user) is user
+
+
+def test_require_lead_or_admin_rejects_member() -> None:
+    user = CurrentUser(
+        id=1,
+        username="member",
+        role="member",
+        auth_via="jwt",
+        must_change_password=False,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        require_lead_or_admin(user)
+    assert exc_info.value.status_code == 403
+
+
 def test_register_login_me(client) -> None:
     registered = client.post(
         "/auth/register",

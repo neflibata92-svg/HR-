@@ -60,6 +60,11 @@ def test_personal_api_key_scores_and_response_has_only_public_fields(client) -> 
         score=88,
         reason="匹配",
         evidence=["Python"],
+        missing_fields=["portfolio"],
+        estimated_fields=["team_size"],
+        critical_fields=[],
+        confidence=0.9,
+        decision="eligible",
         model="provider-model",
     )
 
@@ -75,10 +80,85 @@ def test_personal_api_key_scores_and_response_has_only_public_fields(client) -> 
         "score": 88,
         "reason": "匹配",
         "evidence": ["Python"],
+        "missing_fields": ["portfolio"],
+        "estimated_fields": ["team_size"],
+        "critical_fields": [],
+        "confidence": 0.9,
+        "decision": "eligible",
         "model": "provider-model",
     }
-    assert set(response.json()) == {"score", "reason", "evidence", "model"}
+    assert set(response.json()) == {
+        "score", "reason", "evidence", "missing_fields", "estimated_fields",
+        "critical_fields", "confidence", "decision", "model",
+    }
     assert mocked.call_args.args[1:] == ("Python JD", "candidate")
+    assert mocked.call_args.kwargs == {}
+
+
+def test_server_ignores_legacy_critical_fields_and_uses_score_threshold(
+    client,
+) -> None:
+    _, headers = _register(client, "decision-admin")
+    score = LlmScoreResult(
+        score=95,
+        reason="高分匹配",
+        evidence=["Python"],
+        missing_fields=["degree"],
+        estimated_fields=[],
+        critical_fields=[
+            {
+                "key": "degree",
+                "label": "学历",
+                "present": False,
+                "evidence": "",
+            }
+        ],
+        confidence=0.9,
+        decision="below_threshold",
+        model="provider-model",
+    )
+    with patch("resume_api.routers.scoring.llm_service.score_candidate", return_value=score):
+        response = client.post(
+            "/api/scoring/evaluate",
+            headers=headers,
+            json={
+                "jd": "Python JD",
+                "summary": "candidate",
+                "critical_fields": [{"key": "degree", "label": "学历"}],
+                "threshold": 80,
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["decision"] == "eligible"
+    assert response.json()["critical_fields"] == []
+
+
+def test_server_accepts_score_when_legacy_critical_field_is_omitted(client) -> None:
+    _, headers = _register(client, "missing-key-admin")
+    score = LlmScoreResult(
+        score=95,
+        reason="按 JD 匹配",
+        evidence=["Python"],
+        missing_fields=[],
+        estimated_fields=[],
+        critical_fields=[],
+        confidence=0.9,
+        decision="eligible",
+        model="provider-model",
+    )
+    with patch("resume_api.routers.scoring.llm_service.score_candidate", return_value=score):
+        response = client.post(
+            "/api/scoring/evaluate",
+            headers=headers,
+            json={
+                "jd": "Python JD",
+                "summary": "candidate",
+                "critical_fields": [{"key": "degree", "label": "学历"}],
+                "threshold": 80,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["decision"] == "eligible"
 
 
 def test_account_and_key_status_are_enforced(client) -> None:

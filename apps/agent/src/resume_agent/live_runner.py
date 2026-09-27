@@ -1,17 +1,16 @@
-"""真站一轮执行。"""
+"""真站任务驱动执行。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 import subprocess
 
-from resume_domain.fingerprint import candidate_fingerprint
 from resume_agent.api_client import ApiClient
-from resume_agent.boss_live import BossLiveSession, RiskPageError
+from resume_agent.boss_live import BossLiveSession, PageStateError, RepeatedDomError, RiskPageError
 from resume_agent.browser import first_page, open_persistent_browser, save_failure_screenshot
 from resume_agent.config import AgentSettings
-from resume_agent.pipeline import Scorer, process_candidate
-from resume_agent.rate_limit import sleep_action_delay
+from resume_agent.pipeline import Scorer
+from resume_agent.runner import run_task_candidates
 from resume_agent.selectors import BossSelectors, load_boss_selectors
 
 
@@ -37,143 +36,158 @@ def run_login(settings: AgentSettings, selectors: BossSelectors | None = None) -
     return 0
 
 
+def download_live_resume(
+    settings: AgentSettings,
+    *,
+    candidate_id: int,
+    candidate_name: str,
+    boss_id: str = "",
+    selectors: BossSelectors | None = None,
+) -> Path | None:
+    selectors = selectors or _load(settings)
+    download_dir = Path(settings.download_dir).resolve()
+    download_dir.mkdir(parents=True, exist_ok=True)
+    with open_persistent_browser(settings) as context:
+        page = first_page(context)
+        session = BossLiveSession(settings=settings, page=page, selectors=selectors)
+        session.goto(selectors.default_recommend_url)
+        return session.download_candidate_attachment(
+            candidate_id,
+            candidate_name,
+            download_dir,
+            boss_id=boss_id,
+        )
+
+
+def check_boss_login_status(
+    settings: AgentSettings,
+    api: ApiClient,
+    *,
+    selectors: BossSelectors | None = None,
+) -> str:
+    """打开已保存的 Profile，并以真实页面状态判断登录是否仍有效。"""
+
+    del api
+    selectors = selectors or _load(settings)
+    try:
+        with open_persistent_browser(settings) as context:
+            page = first_page(context)
+            session = BossLiveSession(settings=settings, page=page, selectors=selectors)
+            session.goto(selectors.default_recommend_url)
+            session.ensure_task_page()
+        return "logged_in"
+    except PageStateError as exc:
+        reason = str(exc).lower()
+        page_url = str(getattr(locals().get("page"), "url", "")).lower()
+        return "expired" if "login" in reason or "/login" in page_url else "unknown"
+    except (RiskPageError, RepeatedDomError):
+        return "unknown"
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
 def run_live_round(
     settings: AgentSettings,
     api: ApiClient,
     scorer: Scorer,
     *,
+    task_id: int,
+    claimed_task: dict[str, object] | None = None,
     selectors: BossSelectors | None = None,
     entry_url: str = "",
 ) -> int:
+    """领取服务端明确分配的任务，并按岗位入口处理候选人。"""
+
+    del scorer
     selectors = selectors or _load(settings)
     try:
-        api.heartbeat("running")
+        api.heartbeat(
+            "idle",
+            availability="idle",
+            boss_login_status="unknown",
+        )
+        task = claimed_task or api.get_task(task_id)
     except Exception as exc:  # noqa: BLE001
-        print(f"API 不可达，停止新招呼: {exc}")
+        print(f"API 不可达或指定任务不可读取，停止新招呼: {exc}")
         return 2
 
-    jobs = api.list_enabled_jobs()
-    if not jobs:
-        print("无启用岗位")
-        api.heartbeat("idle")
-        return 0
-    job = jobs[0]
-    url = entry_url or job.get("boss_entry_url") or selectors.default_recommend_url
-    hourly_limit = int(job.get("hourly_greet_limit") or 20)
-    greeted_count = 0
-
+    task_claimed = claimed_task is not None
     try:
         with open_persistent_browser(settings) as context:
             page = first_page(context)
-            session = BossLiveSession(
-                page,
-                settings,
-                selectors,
-                min_delay_ms=int(job.get("min_action_delay_ms") or 1500),
-                max_delay_ms=int(job.get("max_action_delay_ms") or 4000),
+            session = BossLiveSession(settings=settings, page=page, selectors=selectors)
+            target_url = str(task.get("boss_entry_url") or entry_url).strip()
+            if target_url:
+                session.goto(target_url)
+            else:
+                session.ensure_task_page()
+            if claimed_task is None:
+                task = api.claim_task(task_id)
+                task_claimed = True
+            api.heartbeat(
+                "running",
+                availability="busy",
+                current_task_id=task_id,
+                current_job_id=int(task["job_id"]),
+                boss_login_status="logged_in",
             )
-            session.goto(url)
-            pairs = session.extract_candidates()
+            pairs = session.extract_candidates(limit=int(task["requested_count"]))
             if not pairs:
                 path = save_failure_screenshot(page, settings, "no_cards")
-                print(
-                    "未找到候选人卡片。请校准 apps/agent/boss_selectors.json 的 card_selectors。"
-                    f" 截图: {path}"
-                )
+                api.pause_task(int(task["id"]), "no_cards")
+                api.acknowledge_control(int(task["id"]))
                 api.heartbeat("paused", last_error="no_cards")
+                print(f"当前页未找到候选人卡片，任务已暂停。截图: {path}")
                 return 4
 
-            total = len(pairs)
-            for index in range(total):
-                # 每次回到列表，避免 locator 失效
-                session.goto(url)
-                pairs = session.extract_candidates()
-                if index >= len(pairs):
-                    break
-                raw, card = pairs[index]
-                if settings.open_detail_for_segments:
-                    raw = session.enrich_from_detail(card, raw)
+            candidates = [raw for raw, _ in pairs]
+            cards_by_identity = {
+                (raw.boss_id, raw.name, raw.org): card for raw, card in pairs
+            }
 
-                fingerprint = candidate_fingerprint(raw.name, raw.org or raw.boss_id or "unknown")
-                upserted = api.upsert_candidate(
-                    {
-                        "boss_id": raw.boss_id or None,
-                        "fingerprint": fingerprint,
-                        "name": raw.name,
-                        "age": raw.age,
-                        "years_of_experience": raw.years,
-                        "job_segments_json": "[]",
-                        "source": "boss",
-                    }
-                )
-                already = api.outreach_exists(job["id"], upserted["id"])
-                blocked = api.exchange_blocked(upserted["id"])
-
-                def greet_fn(candidate, message: str) -> bool:
-                    return session.greet(candidate, message, None)
-
-                from resume_agent.runner import PipelineGreeter
-
-                greeter = PipelineGreeter(greet_fn)
-                result = process_candidate(
-                    raw,
-                    jd_text=job["jd_text"],
-                    threshold=int(job["score_threshold"]),
-                    greet_template=job["greet_template"],
-                    exchanged_within_30_days=blocked,
-                    already_greeted=already,
-                    scorer=scorer,
-                    greeter=greeter,
-                )
-                api.post_score(
-                    {
-                        "candidate_id": upserted["id"],
-                        "job_id": job["id"],
-                        "hard_filter_passed": result.action != "hard_filter_reject",
-                        "hard_filter_reasons": result.reasons
-                        if result.action == "hard_filter_reject"
-                        else [],
-                        "score": result.score,
-                        "reason": ";".join(result.reasons),
-                        "model": result.model,
-                    }
-                )
-                if result.action == "greeted":
-                    api.post_outreach(
-                        {
-                            "candidate_id": upserted["id"],
-                            "job_id": job["id"],
-                            "greeted": True,
-                        }
+            class LiveGreeter:
+                def greet(self, candidate, message: str) -> bool:
+                    card = cards_by_identity.get(
+                        (candidate.boss_id, candidate.name, candidate.org)
                     )
-                    greeted_count += 1
-                    if settings.wait_attachment_after_greet:
-                        file_path = session.wait_and_download_attachment(Path(settings.download_dir))
-                        if file_path is None:
-                            print(f"{raw.name}: 已打招呼，暂未收到附件")
-                        else:
-                            api.upload_resume_file(file_path, candidate_id=upserted["id"])
-                            api.mark_attachment_received(job["id"], upserted["id"])
-                            print(f"{raw.name}: 附件已入库 {file_path.name}")
-                    if greeted_count >= hourly_limit:
-                        print(f"已达本轮招呼上限 {hourly_limit}，停止")
-                        break
+                    return session.greet(candidate, message, card)
 
-                print(f"{raw.name}: {result.action} score={result.score} reasons={result.reasons}")
-                sleep_action_delay(
-                    int(job.get("min_action_delay_ms") or 1500),
-                    int(job.get("max_action_delay_ms") or 4000),
-                )
-
-            api.heartbeat("idle")
+            run_task_candidates(
+                settings=settings,
+                api=api,
+                task=task,
+                candidates=candidates,
+                greeter=LiveGreeter(),
+            )
+            api.heartbeat("idle", boss_login_status="logged_in")
             return 0
-    except RiskPageError as exc:
-        api.heartbeat("paused", last_error=str(exc))
-        print(f"风控停机: {exc}")
+    except (RiskPageError, PageStateError, RepeatedDomError) as exc:
+        reason = str(exc)
+        login_status = "expired" if isinstance(exc, PageStateError) and "login" in reason.lower() else "unknown"
+        if task_claimed:
+            api.pause_task(int(task["id"]), reason)
+            api.acknowledge_control(int(task["id"]))
+        api.heartbeat(
+            "paused" if task_claimed else "idle",
+            availability="offline" if login_status == "expired" else ("busy" if task_claimed else "idle"),
+            current_task_id=int(task["id"]) if task_claimed else None,
+            current_job_id=int(task["job_id"]) if task_claimed else None,
+            boss_login_status=login_status,
+            last_error=reason,
+        )
+        state = "任务已暂停" if task_claimed else "任务未领取"
+        print(f"页面异常，{state}: {reason}")
         return 3
     except Exception as exc:  # noqa: BLE001
-        api.heartbeat("paused", last_error=str(exc))
-        print(f"真站运行失败: {exc}")
+        reason = str(exc)
+        if task_claimed:
+            try:
+                api.pause_task(int(task["id"]), reason)
+                api.acknowledge_control(int(task["id"]))
+                api.heartbeat("paused", last_error=reason)
+            except Exception:  # noqa: BLE001
+                pass
+        print(f"真站运行失败: {reason}")
         return 5
 
 

@@ -13,6 +13,188 @@ from resume_agent.pipeline import Scorer, process_candidate
 from resume_agent.rate_limit import sleep_action_delay
 
 
+class TaskControlStop(RuntimeError):
+    """服务端已要求暂停或终止当前任务。"""
+
+
+def _ensure_task_running(api: ApiClient, task_id: int) -> None:
+    status = str(api.get_task(task_id).get("status") or "")
+    if status in {"pausing", "cancelling"}:
+        api.acknowledge_control(task_id)
+        raise TaskControlStop(status)
+    if status not in {"ready", "running"}:
+        raise TaskControlStop(status)
+
+
+class TaskGreeter:
+    def __init__(
+        self,
+        api: ApiClient,
+        *,
+        task_id: int,
+        job_id: int,
+        candidate_id: int,
+        greet_fn: Any,
+    ) -> None:
+        self.api = api
+        self.task_id = task_id
+        self.job_id = job_id
+        self.candidate_id = candidate_id
+        self.greet_fn = greet_fn
+        self.event_id: int | None = None
+
+    def greet(self, candidate: RawCandidate, message: str) -> bool:
+        _ensure_task_running(self.api, self.task_id)
+        event = self.api.reserve_outreach(
+            self.candidate_id,
+            self.job_id,
+            task_id=self.task_id,
+            message=message,
+        )
+        self.event_id = int(event["id"])
+        try:
+            _ensure_task_running(self.api, self.task_id)
+        except TaskControlStop:
+            self.api.fail_outreach(self.event_id, "task_control_requested")
+            raise
+        verified = bool(self.greet_fn(candidate, message))
+        if verified:
+            self.api.confirm_outreach(self.event_id)
+        else:
+            self.api.fail_outreach(self.event_id, "message_not_verified")
+        return verified
+
+
+def _render_greeting(template: str, candidate: RawCandidate, task: dict[str, Any]) -> str:
+    return (
+        template.replace("{{candidate_name}}", candidate.name)
+        .replace("{{ candidate_name }}", candidate.name)
+        .replace("{{job_name}}", str(task.get("job_name_snapshot") or ""))
+        .replace("{{ job_name }}", str(task.get("job_name_snapshot") or ""))
+    )
+
+
+def run_task_candidates(
+    *,
+    settings: AgentSettings,
+    api: ApiClient,
+    task: dict[str, Any],
+    candidates: list[RawCandidate],
+    greeter: Any,
+) -> int:
+    """按服务端任务快照处理当前页候选人。"""
+
+    del settings
+    requested = int(task["requested_count"])
+    selected = candidates[:requested]
+    terminal = {"needs_review", "below_threshold", "contacted", "duplicate_contact", "failed"}
+    task_id = int(task["id"])
+    completed_count = 0
+    try:
+        _ensure_task_running(api, task_id)
+        for position, raw in enumerate(selected, start=1):
+            _ensure_task_running(api, task_id)
+            fingerprint = candidate_fingerprint(raw.name, raw.org or raw.boss_id or "unknown")
+            candidate = api.upsert_candidate(
+                {
+                    "boss_id": raw.boss_id or None,
+                    "fingerprint": fingerprint,
+                    "name": raw.name,
+                    "age": raw.age,
+                    "years_of_experience": raw.years,
+                    "job_segments_json": "[]",
+                    "source": "boss",
+                }
+            )
+            item = api.create_task_item(
+                task_id,
+                candidate_id=int(candidate["id"]),
+                position_index=position,
+            )
+            if item.get("status") in terminal:
+                completed_count += 1
+                continue
+
+            _ensure_task_running(api, task_id)
+            message = _render_greeting(str(task["greet_template_snapshot"]), raw, task)
+            task_greeter = TaskGreeter(
+                api,
+                task_id=task_id,
+                job_id=int(task["job_id"]),
+                candidate_id=int(candidate["id"]),
+                greet_fn=greeter.greet,
+            )
+            result = process_candidate(
+                raw,
+                jd_text=str(task["jd_text_snapshot"]),
+                threshold=int(task["score_threshold_snapshot"]),
+                greet_template=message,
+                exchanged_within_30_days=api.exchange_blocked(int(candidate["id"])),
+                already_greeted=False,
+                scorer=api,
+                greeter=task_greeter,
+            )
+            if result.action == "score_error":
+                raise RuntimeError(";".join(result.reasons))
+            score_event = api.post_score(
+                {
+                    "candidate_id": candidate["id"],
+                    "job_id": task["job_id"],
+                    "candidate_job_id": item.get("candidate_job_id"),
+                    "task_id": task_id,
+                    "hard_filter_passed": result.action != "hard_filter_reject",
+                    "hard_filter_reasons": result.reasons
+                    if result.action == "hard_filter_reject"
+                    else [],
+                    "score": result.score,
+                    "reason": ";".join(result.reasons),
+                    "evidence": result.evidence or [],
+                    "missing_fields": result.missing_fields or [],
+                    "estimated_fields": result.estimated_fields or [],
+                    "critical_fields": result.critical_fields or [],
+                    "confidence": result.confidence,
+                    "decision": result.action
+                    if result.action in {"needs_review", "below_threshold"}
+                    else "eligible"
+                    if result.action in {"greeted", "greet_failed"}
+                    else "error",
+                    "model": result.model,
+                }
+            )
+            if result.action == "greet_failed":
+                api.fail_task_item(
+                    task_id,
+                    int(item["id"]),
+                    failure_code="message_not_verified",
+                    failure_detail=";".join(result.reasons),
+                )
+                completed_count += 1
+                continue
+            if result.action in {"hard_filter_reject", "score_error"}:
+                api.fail_task_item(
+                    task_id,
+                    int(item["id"]),
+                    failure_code=result.action,
+                    failure_detail=";".join(result.reasons),
+                )
+                completed_count += 1
+                continue
+            status = "contacted" if result.action == "greeted" else result.action
+            api.complete_task_item(
+                task_id,
+                int(item["id"]),
+                status=status,
+                score_event_id=int(score_event["id"]),
+                outreach_event_id=task_greeter.event_id,
+            )
+            completed_count += 1
+    except TaskControlStop:
+        return completed_count
+
+    api.complete_task(task_id)
+    return completed_count
+
+
 class PipelineGreeter:
     def __init__(self, greet_fn: Any) -> None:
         self._greet_fn = greet_fn

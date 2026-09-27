@@ -13,6 +13,8 @@ const props = defineProps<{ user: UserMe }>();
 const emit = defineEmits<{ logout: [] }>();
 
 const activePage = ref<PageId>("dashboard");
+const targetJobId = ref<number | null>(null);
+const editTargetJob = ref(false);
 const agentState = ref<"loading" | "online" | "empty" | "error">("loading");
 const agentMachine = ref("");
 const agentError = ref("");
@@ -24,6 +26,18 @@ const agentLabel = computed(() => {
   if (agentState.value === "empty") return "暂无设备";
   return "状态未知";
 });
+
+function navigate(page: PageId): void {
+  targetJobId.value = null;
+  editTargetJob.value = false;
+  activePage.value = page;
+}
+
+function openJob(jobId: number, edit: boolean): void {
+  targetJobId.value = jobId;
+  editTargetJob.value = edit;
+  activePage.value = "jobs";
+}
 
 async function loadAgentSummary(): Promise<void> {
   agentState.value = "loading";
@@ -61,7 +75,7 @@ onMounted(() => void loadAgentSummary());
           type="button"
           :aria-label="agentState === 'error' ? '重试 Agent 状态' : '前往工作台查看 Agent 状态'"
           :title="agentError || undefined"
-          @click="agentState === 'error' ? loadAgentSummary() : (activePage = 'dashboard')"
+          @click="agentState === 'error' ? loadAgentSummary() : navigate('dashboard')"
         >
           <span
             class="connection-dot"
@@ -89,7 +103,7 @@ onMounted(() => void loadAgentSummary());
         :aria-label="`前往${item.label}`"
         :aria-current="activePage === item.id ? 'page' : undefined"
         :class="{ active: activePage === item.id }"
-        @click="activePage = item.id"
+        @click="navigate(item.id)"
       >
         <span class="nav-number">{{ String(index + 1).padStart(2, "0") }}</span>
         <span>{{ item.label }}</span>
@@ -103,8 +117,8 @@ onMounted(() => void loadAgentSummary());
     </nav>
 
     <main class="app-content">
-      <DashboardPage v-if="activePage === 'dashboard'" />
-      <JobsPage v-else-if="activePage === 'jobs'" />
+      <DashboardPage v-if="activePage === 'dashboard'" @open-job="openJob" />
+      <JobsPage v-else-if="activePage === 'jobs'" :target-job-id="targetJobId" :edit-target="editTargetJob" />
       <CandidatesPage v-else-if="activePage === 'candidates'" :user="props.user" />
       <ResumesPage v-else-if="activePage === 'resumes'" />
       <SettingsPage v-else :user="props.user" />

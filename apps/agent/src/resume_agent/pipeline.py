@@ -13,7 +13,13 @@ from resume_agent.parse_page import RawCandidate
 
 
 class Scorer(Protocol):
-    def score_candidate(self, jd: str, summary: str) -> LlmScoreResult: ...
+    def score_candidate(
+        self,
+        jd: str,
+        summary: str,
+        *,
+        threshold: int,
+    ) -> LlmScoreResult: ...
 
 
 class Greeter(Protocol):
@@ -26,6 +32,11 @@ class ProcessResult:
     reasons: list[str]
     score: int | None = None
     model: str = ""
+    evidence: list[str] | None = None
+    missing_fields: list[str] | None = None
+    estimated_fields: list[str] | None = None
+    critical_fields: list[dict[str, object]] | None = None
+    confidence: float | None = None
 
 
 def process_candidate(
@@ -60,23 +71,51 @@ def process_candidate(
         f"{candidate_fingerprint(candidate.name, candidate.org)}"
     )
     try:
-        scored = scorer.score_candidate(jd_text, summary)
+        scored = scorer.score_candidate(
+            jd_text,
+            summary,
+            threshold=threshold,
+        )
     except Exception as exc:  # noqa: BLE001 - 流水线需降级
         return ProcessResult(action="score_error", reasons=[str(exc)])
+
+    details = {
+        "score": scored.score,
+        "model": scored.model,
+        "evidence": scored.evidence,
+        "missing_fields": scored.missing_fields,
+        "estimated_fields": scored.estimated_fields,
+        "critical_fields": [item.model_dump() for item in scored.critical_fields],
+        "confidence": scored.confidence,
+    }
+    if scored.decision != "eligible":
+        return ProcessResult(
+            action=scored.decision,
+            reasons=[scored.reason],
+            **details,
+        )
 
     if not should_greet(scored.score, threshold):
         return ProcessResult(
             action="below_threshold",
             reasons=[scored.reason],
-            score=scored.score,
-            model=scored.model,
+            **details,
         )
 
-    if greeter is not None:
-        greeter.greet(candidate, greet_template)
+    if greeter is None:
+        return ProcessResult(
+            action="eligible",
+            reasons=["eligible_not_sent"],
+            **details,
+        )
+    if not greeter.greet(candidate, greet_template):
+        return ProcessResult(
+            action="greet_failed",
+            reasons=["message_not_verified"],
+            **details,
+        )
     return ProcessResult(
         action="greeted",
         reasons=[scored.reason],
-        score=scored.score,
-        model=scored.model,
+        **details,
     )

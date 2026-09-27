@@ -47,16 +47,30 @@ def test_rejects_avg_tenure_not_gt_1() -> None:
     assert "avg_tenure" in result.reasons
 
 
-def test_skips_when_segments_unknown() -> None:
+def test_unknown_fields_do_not_reject_candidate() -> None:
     snap = CandidateSnapshot(
-        age=30,
-        years_of_experience=4,
+        age=None,
+        years_of_experience=None,
         job_segment_count=None,
-        total_work_years=4.0,
+        total_work_years=None,
     )
     result = apply_hard_filter(snap, exchanged_within_30_days=False)
+    assert result.passed is True
+    assert result.reasons == []
+    assert result.unknown_fields == ["age", "years_of_experience", "avg_tenure"]
+
+
+def test_unknown_fields_do_not_hide_explicit_rejection() -> None:
+    snap = CandidateSnapshot(
+        age=None,
+        years_of_experience=6,
+        job_segment_count=None,
+        total_work_years=None,
+    )
+    result = apply_hard_filter(snap, exchanged_within_30_days=True)
     assert result.passed is False
-    assert "avg_tenure_unknown" in result.reasons
+    assert result.reasons == ["years", "exchange_cooldown"]
+    assert result.unknown_fields == ["age", "avg_tenure"]
 
 
 def test_rejects_recent_exchange() -> None:

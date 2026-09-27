@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from resume_api.models import ExchangeEvent, OutreachEvent, ScoreEvent
-from resume_api.schemas import ExchangeCreate, OutreachCreate, ScoreEventCreate
+from resume_api.schemas import (
+    ExchangeCreate,
+    OutreachCreate,
+    OutreachReservationCreate,
+    ScoreEventCreate,
+)
+from resume_api.services import outreach as outreach_service
 
 
 def add_exchange(
@@ -60,10 +66,21 @@ def add_score_event(db: Session, payload: ScoreEventCreate) -> ScoreEvent:
     event = ScoreEvent(
         candidate_id=payload.candidate_id,
         job_id=payload.job_id,
+        candidate_job_id=payload.candidate_job_id,
+        resume_id=payload.resume_id,
+        task_id=payload.task_id,
         hard_filter_passed=payload.hard_filter_passed,
         hard_filter_reasons=json.dumps(payload.hard_filter_reasons, ensure_ascii=False),
         score=payload.score,
         reason=payload.reason,
+        evidence_json=json.dumps(payload.evidence, ensure_ascii=False),
+        missing_fields_json=json.dumps(payload.missing_fields, ensure_ascii=False),
+        estimated_fields_json=json.dumps(payload.estimated_fields, ensure_ascii=False),
+        critical_fields_json=json.dumps(
+            [item.model_dump() for item in payload.critical_fields], ensure_ascii=False
+        ),
+        confidence=payload.confidence,
+        decision=payload.decision,
         model=payload.model,
     )
     db.add(event)
@@ -77,17 +94,24 @@ def add_outreach(db: Session, payload: OutreachCreate) -> tuple[OutreachEvent, b
         select(OutreachEvent).where(
             OutreachEvent.candidate_id == payload.candidate_id,
             OutreachEvent.job_id == payload.job_id,
+            OutreachEvent.status.in_({"sending", "sent", "confirmed"}),
         )
     )
     if existing is not None:
         return existing, True
-    event = OutreachEvent(
-        candidate_id=payload.candidate_id,
-        job_id=payload.job_id,
-        greeted=payload.greeted,
-        attachment_received=payload.attachment_received,
+    event = outreach_service.reserve(
+        db,
+        OutreachReservationCreate(
+            candidate_id=payload.candidate_id,
+            job_id=payload.job_id,
+            message="legacy outreach",
+        ),
     )
-    db.add(event)
+    if payload.greeted:
+        event = outreach_service.confirm(db, event.id)
+    else:
+        event = outreach_service.fail(db, event.id, reason="legacy outreach failed")
+    event.attachment_received = payload.attachment_received
     db.commit()
     db.refresh(event)
     return event, False

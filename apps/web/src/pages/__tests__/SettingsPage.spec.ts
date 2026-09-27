@@ -22,6 +22,9 @@ const member: UserMe = {
 const admin: UserMe = {
   id: 1, username: "admin.hr", role: "admin", is_active: true, must_change_password: false,
 };
+const lead: UserMe = {
+  id: 3, username: "lead.hr", role: "lead", is_active: true, must_change_password: false,
+};
 const activeKey: ApiKeyRow = {
   id: 3, name: "桌面 Agent", key_prefix: "rsk_live_abcd", created_at: "2026-09-20T08:00:00Z", revoked_at: null,
 };
@@ -68,6 +71,15 @@ describe("SettingsPage", () => {
     expect(api.listApiKeys).toHaveBeenCalledOnce();
     expect(api.listUsers).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("HR 账号管理");
+  });
+
+  it("shows lead without granting admin account management", async () => {
+    const wrapper = mountPage(lead);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("HR 负责人");
+    expect(wrapper.text()).not.toContain("HR 账号管理");
+    expect(api.listUsers).not.toHaveBeenCalled();
   });
 
   it("mounts HR account management only for an admin", async () => {
