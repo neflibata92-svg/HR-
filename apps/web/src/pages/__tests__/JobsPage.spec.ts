@@ -29,6 +29,8 @@ const frontendJob: Job = {
   hourly_greet_limit: 20,
   min_action_delay_ms: 1500,
   max_action_delay_ms: 4000,
+  critical_fields: [{ key: "portfolio", label: "作品集" }],
+  critical_fields_confirmed: true,
   enabled: true,
   created_at: "2026-09-20T08:00:00Z",
 };
@@ -383,6 +385,8 @@ describe("JobsPage", () => {
       min_action_delay_ms: 1500,
       max_action_delay_ms: 4000,
       default_requested_count: 20,
+      critical_fields: [],
+      critical_fields_confirmed: false,
     });
     expect(wrapper.text()).toContain("高级前端工程师");
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
@@ -412,6 +416,8 @@ describe("JobsPage", () => {
       min_action_delay_ms: 1500,
       max_action_delay_ms: 4000,
       default_requested_count: 20,
+      critical_fields: [{ key: "portfolio", label: "作品集" }],
+      critical_fields_confirmed: true,
     });
     expect(wrapper.text()).toContain("前端技术负责人");
 

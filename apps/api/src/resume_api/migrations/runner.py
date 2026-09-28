@@ -685,12 +685,129 @@ def _add_task_entry_url_snapshot(connection: Connection) -> bool:
     return True
 
 
+def _create_outreach_quota_ledger(connection: Connection) -> bool:
+    required = {
+        "users",
+        "screening_tasks",
+        "screening_task_items",
+        "outreach_events",
+    }
+    if not required <= set(inspect(connection).get_table_names()):
+        return False
+
+    _add_column(
+        connection,
+        "outreach_events",
+        "quota_owner_user_id INTEGER REFERENCES users(id)",
+    )
+    connection.execute(
+        text(
+            "UPDATE outreach_events SET quota_owner_user_id = ("
+            "SELECT created_by_user_id FROM screening_tasks "
+            "WHERE screening_tasks.id = outreach_events.task_id) "
+            "WHERE task_id IS NOT NULL AND quota_owner_user_id IS NULL"
+        )
+    )
+    unattributed_task_events = connection.execute(
+        text(
+            "SELECT COUNT(*) FROM outreach_events "
+            "WHERE task_id IS NOT NULL AND quota_owner_user_id IS NULL"
+        )
+    ).scalar_one()
+    if unattributed_task_events:
+        raise RuntimeError(
+            "Cannot attribute task-linked outreach events to a task creator"
+        )
+    _create_model_table(connection, "outreach_quota_ledgers")
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_screening_task_id_owner "
+            "ON screening_tasks (id, created_by_user_id)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_screening_task_item_id_task "
+            "ON screening_task_items (id, task_id)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_outreach_event_id_quota_owner "
+            "ON outreach_events (id, quota_owner_user_id)"
+        )
+    )
+    if connection.dialect.name == "sqlite":
+        connection.execute(
+            text(
+                "CREATE TRIGGER IF NOT EXISTS trg_outreach_event_quota_owner_insert "
+                "BEFORE INSERT ON outreach_events FOR EACH ROW "
+                "WHEN NEW.task_id IS NOT NULL AND NOT EXISTS ("
+                "SELECT 1 FROM screening_tasks WHERE id = NEW.task_id "
+                "AND created_by_user_id = NEW.quota_owner_user_id) "
+                "BEGIN SELECT RAISE(ABORT, 'outreach quota owner must match task creator'); END"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TRIGGER IF NOT EXISTS trg_outreach_event_quota_owner_update "
+                "BEFORE UPDATE OF task_id, quota_owner_user_id ON outreach_events "
+                "FOR EACH ROW WHEN NEW.task_id IS NOT NULL AND NOT EXISTS ("
+                "SELECT 1 FROM screening_tasks WHERE id = NEW.task_id "
+                "AND created_by_user_id = NEW.quota_owner_user_id) "
+                "BEGIN SELECT RAISE(ABORT, 'outreach quota owner must match task creator'); END"
+            )
+        )
+    else:
+        existing_foreign_keys = inspect(connection).get_foreign_keys("outreach_events")
+        if not any(
+            foreign_key.get("name") == "fk_outreach_event_task_quota_owner"
+            for foreign_key in existing_foreign_keys
+        ):
+            connection.execute(
+                text(
+                    "ALTER TABLE outreach_events ADD CONSTRAINT "
+                    "fk_outreach_event_task_quota_owner "
+                    "FOREIGN KEY (task_id, quota_owner_user_id) "
+                    "REFERENCES screening_tasks (id, created_by_user_id)"
+                )
+            )
+        existing_checks = inspect(connection).get_check_constraints("outreach_events")
+        if not any(
+            check.get("name") == "ck_outreach_event_task_has_quota_owner"
+            for check in existing_checks
+        ):
+            connection.execute(
+                text(
+                    "ALTER TABLE outreach_events ADD CONSTRAINT "
+                    "ck_outreach_event_task_has_quota_owner "
+                    "CHECK (task_id IS NULL OR quota_owner_user_id IS NOT NULL)"
+                )
+            )
+    _create_model_table(connection, "outreach_quota_reservations")
+    # Start the new policy at rollout. Historical outreach remains available to
+    # global de-duplication, but cannot be attributed safely to an HR quota.
+    connection.execute(
+        text(
+            "INSERT INTO outreach_quota_ledgers "
+            "(user_id, hard_limit, confirmed_count, reserved_count) "
+            "SELECT users.id, 200, 0, 0 FROM users "
+            "WHERE NOT EXISTS ("
+            "SELECT 1 FROM outreach_quota_ledgers "
+            "WHERE outreach_quota_ledgers.user_id = users.id"
+            ")"
+        )
+    )
+    return True
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("0001_add_must_change_password", _add_must_change_password),
     ("0002_talent_records", _upgrade_talent_records),
     ("0003_job_task_resume_archives", _upgrade_job_task_resume_archives),
     ("0004_candidate_history", _migrate_candidate_history),
     ("0005_task_entry_url_snapshot", _add_task_entry_url_snapshot),
+    ("0006_outreach_quota_ledger", _create_outreach_quota_ledger),
 )
 
 

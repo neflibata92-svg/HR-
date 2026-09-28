@@ -17,6 +17,7 @@ from resume_api.routers import (
     events,
     jobs,
     outreach,
+    quotas,
     resumes,
     reviews,
     scoring,
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     application.include_router(reviews.router)
     application.include_router(screening_tasks.router)
     application.include_router(outreach.router)
+    application.include_router(quotas.router)
 
     @application.get("/health")
     def health() -> dict[str, str]:

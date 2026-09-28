@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createScreeningTask,
+  getMyOutreachQuota,
+  listUnknownOutreachEvents,
   me,
   previewCandidateMerge,
+  releaseUnknownOutreachEvent,
   suggestCriticalFields,
 } from "../api";
 
@@ -51,6 +54,45 @@ describe("authenticated API requests", () => {
         critical_fields: [{ key: "portfolio", label: "作品集" }],
         critical_fields_source: { confirmed: true, source: "manual" },
       }),
+    }));
+  });
+
+  it("loads only the authenticated user's cumulative outreach quota", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      limit: 200, confirmed: 4, reserved: 1, remaining: 195,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(getMyOutreachQuota()).resolves.toEqual({
+      limit: 200, confirmed: 4, reserved: 1, remaining: 195,
+    });
+
+    expect(fetch).toHaveBeenCalledWith("/api/quotas/me", expect.any(Object));
+  });
+
+  it("loads unknown outreach events for administrator review", async () => {
+    const events = [{
+      id: 12, candidate_id: 4, candidate_name: "李女士", job_id: 3, job_name: "产品经理",
+      quota_owner_username: "hr.one", task_id: 8, failure_reason: "未能确认发送结果",
+      created_at: "2026-09-25T10:00:00Z",
+    }];
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(events), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(listUnknownOutreachEvents()).resolves.toEqual(events);
+    expect(fetch).toHaveBeenCalledWith("/api/outreach/unknown", expect.any(Object));
+  });
+
+  it("confirms an unknown event was not sent with an audit reason", async () => {
+    const response = { id: 12, status: "released", failure_reason: "经 HR 核实未发送" };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(releaseUnknownOutreachEvent(12, "已检查平台会话记录")).resolves.toEqual(response);
+    expect(fetch).toHaveBeenCalledWith("/api/outreach/12/release-unknown", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ reason: "已检查平台会话记录", confirmed_not_sent: true }),
     }));
   });
 

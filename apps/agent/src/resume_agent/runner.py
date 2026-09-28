@@ -9,7 +9,7 @@ from resume_domain.fingerprint import candidate_fingerprint
 from resume_agent.api_client import ApiClient
 from resume_agent.config import AgentSettings
 from resume_agent.parse_page import RawCandidate, parse_list_html, detect_risk_page
-from resume_agent.pipeline import Scorer, process_candidate
+from resume_agent.pipeline import Scorer, SendOutcomeUnknown, process_candidate
 from resume_agent.rate_limit import sleep_action_delay
 
 
@@ -34,14 +34,17 @@ class TaskGreeter:
         task_id: int,
         job_id: int,
         candidate_id: int,
+        task_item_id: int,
         greet_fn: Any,
     ) -> None:
         self.api = api
         self.task_id = task_id
         self.job_id = job_id
         self.candidate_id = candidate_id
+        self.task_item_id = task_item_id
         self.greet_fn = greet_fn
         self.event_id: int | None = None
+        self.outcome_unknown = False
 
     def greet(self, candidate: RawCandidate, message: str) -> bool:
         _ensure_task_running(self.api, self.task_id)
@@ -49,20 +52,40 @@ class TaskGreeter:
             self.candidate_id,
             self.job_id,
             task_id=self.task_id,
+            task_item_id=self.task_item_id,
             message=message,
         )
         self.event_id = int(event["id"])
+        if event.get("idempotent_hit"):
+            if event.get("status") == "confirmed":
+                return True
+            if event.get("status") in {"sending", "unknown"}:
+                self.outcome_unknown = True
+                self.api.unknown_outreach(self.event_id, "existing_reservation_retry")
+            return False
         try:
             _ensure_task_running(self.api, self.task_id)
         except TaskControlStop:
             self.api.fail_outreach(self.event_id, "task_control_requested")
             raise
-        verified = bool(self.greet_fn(candidate, message))
-        if verified:
+        try:
+            outcome = self.greet_fn(candidate, message)
+        except SendOutcomeUnknown:
+            self.api.unknown_outreach(self.event_id, "send_result_unknown")
+            self.outcome_unknown = True
+            return False
+        except Exception:
+            self.api.fail_outreach(self.event_id, "greet_failed_before_send")
+            raise
+        if outcome is None:
+            self.api.unknown_outreach(self.event_id, "send_result_unknown")
+            self.outcome_unknown = True
+            return False
+        if outcome:
             self.api.confirm_outreach(self.event_id)
         else:
-            self.api.fail_outreach(self.event_id, "message_not_verified")
-        return verified
+            self.api.fail_outreach(self.event_id, "send_not_started")
+        return bool(outcome)
 
 
 def _render_greeting(template: str, candidate: RawCandidate, task: dict[str, Any]) -> str:
@@ -122,6 +145,7 @@ def run_task_candidates(
                 task_id=task_id,
                 job_id=int(task["job_id"]),
                 candidate_id=int(candidate["id"]),
+                task_item_id=int(item["id"]),
                 greet_fn=greeter.greet,
             )
             result = process_candidate(
@@ -156,12 +180,26 @@ def run_task_candidates(
                     "decision": result.action
                     if result.action in {"needs_review", "below_threshold"}
                     else "eligible"
-                    if result.action in {"greeted", "greet_failed"}
+                    if result.action == "greeted"
+                    else "needs_review"
+                    if result.action == "greet_failed" and task_greeter.outcome_unknown
+                    else "eligible"
+                    if result.action == "greet_failed"
                     else "error",
                     "model": result.model,
                 }
             )
             if result.action == "greet_failed":
+                if task_greeter.outcome_unknown:
+                    api.complete_task_item(
+                        task_id,
+                        int(item["id"]),
+                        status="needs_review",
+                        score_event_id=int(score_event["id"]),
+                        outreach_event_id=task_greeter.event_id,
+                    )
+                    completed_count += 1
+                    continue
                 api.fail_task_item(
                     task_id,
                     int(item["id"]),

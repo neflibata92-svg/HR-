@@ -118,6 +118,40 @@ export type ApiKeyCreated = ApiKeyRow & {
   api_key: string;
 };
 
+export type OutreachQuota = {
+  limit: number;
+  confirmed: number;
+  reserved: number;
+  remaining: number;
+};
+
+export type UnknownOutreachEvent = {
+  id: number;
+  candidate_id: number | null;
+  candidate_name: string;
+  job_id: number;
+  job_name: string;
+  quota_owner_username: string;
+  task_id: number | null;
+  failure_reason: string;
+  created_at: string | null;
+};
+
+export type OutreachReservationOut = {
+  id: number;
+  idempotent_hit: boolean;
+  candidate_id: number | null;
+  screening_record_id: number | null;
+  job_id: number;
+  task_id: number | null;
+  message_snapshot: string;
+  status: string;
+  failure_reason: string;
+  manual_override_by_user_id: number | null;
+  created_at: string | null;
+  confirmed_at: string | null;
+};
+
 export type CriticalField = {
   key: string;
   label: string;
@@ -397,6 +431,24 @@ export function createApiKey(name: string): Promise<ApiKeyCreated> {
 
 export function revokeApiKey(id: number): Promise<ApiKeyRow> {
   return request(`/auth/api-keys/${id}`, { method: "DELETE" });
+}
+
+export function getMyOutreachQuota(): Promise<OutreachQuota> {
+  return request<OutreachQuota>("/api/quotas/me");
+}
+
+export function listUnknownOutreachEvents(): Promise<UnknownOutreachEvent[]> {
+  return request<UnknownOutreachEvent[]>("/api/outreach/unknown");
+}
+
+export function releaseUnknownOutreachEvent(
+  id: number,
+  reason: string,
+): Promise<OutreachReservationOut> {
+  return request<OutreachReservationOut>(`/api/outreach/${id}/release-unknown`, {
+    method: "POST",
+    body: JSON.stringify({ reason, confirmed_not_sent: true }),
+  });
 }
 
 export function listJobs(): Promise<Job[]> {

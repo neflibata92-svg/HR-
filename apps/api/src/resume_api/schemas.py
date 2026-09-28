@@ -6,7 +6,7 @@ from datetime import datetime
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _ALLOWED_TEMPLATE_VARIABLES = {"candidate_name", "job_name"}
 _TEMPLATE_VARIABLE_RE = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
@@ -599,13 +599,24 @@ class OutreachReservationCreate(BaseModel):
     screening_record_id: int | None = None
     job_id: int
     task_id: int | None = None
+    task_item_id: int | None = None
     message: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def disallow_ambiguous_task_subjects(self):
+        if self.task_item_id is not None and self.screening_record_id is not None:
+            raise ValueError("task_item_id and screening_record_id cannot be combined")
+        return self
 
     @field_validator("screening_record_id")
     @classmethod
     def require_one_subject(cls, value: int | None, info):
-        if value is None and info.data.get("candidate_id") is None:
-            raise ValueError("candidate_id or screening_record_id is required")
+        if (
+            value is None
+            and info.data.get("candidate_id") is None
+            and info.data.get("task_item_id") is None
+        ):
+            raise ValueError("candidate_id, screening_record_id, or task_item_id is required")
         return value
 
 
@@ -615,8 +626,23 @@ class OutreachFailRequest(BaseModel):
     reason: str = Field(min_length=1)
 
 
+class OutreachUnknownReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=5, max_length=1000)
+    confirmed_not_sent: Literal[True]
+
+
+class OutreachQuotaOut(BaseModel):
+    limit: int
+    confirmed: int
+    reserved: int
+    remaining: int
+
+
 class OutreachReservationOut(BaseModel):
     id: int
+    idempotent_hit: bool = False
     candidate_id: int | None
     screening_record_id: int | None
     job_id: int
@@ -629,6 +655,18 @@ class OutreachReservationOut(BaseModel):
     confirmed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class OutreachUnknownOut(BaseModel):
+    id: int
+    candidate_id: int | None
+    candidate_name: str
+    job_id: int
+    job_name: str
+    quota_owner_username: str
+    task_id: int | None
+    failure_reason: str
+    created_at: datetime | None = None
 
 
 class OutreachOverrideCreate(BaseModel):

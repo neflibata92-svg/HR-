@@ -5,7 +5,8 @@ import pytest
 from resume_domain.llm_schema import LlmScoreResult
 from resume_agent.config import AgentSettings
 from resume_agent.parse_page import RawCandidate
-from resume_agent.runner import run_task_candidates
+from resume_agent.pipeline import SendOutcomeUnknown
+from resume_agent.runner import TaskGreeter, run_task_candidates
 
 
 TERMINAL = {"needs_review", "below_threshold", "contacted", "duplicate_contact", "failed"}
@@ -22,8 +23,10 @@ class FakeApi:
         self.scored = 0
         self.confirmed = []
         self.failed_outreach = []
+        self.unknown_outreach_calls = []
         self.task_statuses = ["running"]
         self.control_acks = []
+        self.reservation_response = None
 
     def get_task(self, task_id):
         status = self.task_statuses.pop(0) if len(self.task_statuses) > 1 else self.task_statuses[0]
@@ -63,14 +66,19 @@ class FakeApi:
         assert payload["estimated_fields"] == ["期望薪资"]
         return {"id": 30 + self.scored}
 
-    def reserve_outreach(self, candidate_id, job_id, *, task_id, message):
-        return {"id": 40 + candidate_id, "status": "sending"}
+    def reserve_outreach(self, candidate_id, job_id, *, task_id, task_item_id, message):
+        self.reserved_task_item_ids = getattr(self, "reserved_task_item_ids", [])
+        self.reserved_task_item_ids.append(task_item_id)
+        return self.reservation_response or {"id": 40 + candidate_id, "status": "sending"}
 
     def confirm_outreach(self, event_id):
         self.confirmed.append(event_id)
 
     def fail_outreach(self, event_id, reason):
         self.failed_outreach.append((event_id, reason))
+
+    def unknown_outreach(self, event_id, reason):
+        self.unknown_outreach_calls.append((event_id, reason))
 
     def complete_task_item(self, task_id, item_id, **payload):
         self.completed_items.append((item_id, payload))
@@ -83,12 +91,15 @@ class FakeApi:
 
 
 class FakeGreeter:
-    def __init__(self, verified: bool = True) -> None:
+    def __init__(self, verified: bool | None = True, error: Exception | None = None) -> None:
         self.verified = verified
+        self.error = error
         self.calls = 0
 
     def greet(self, candidate, message):
         self.calls += 1
+        if self.error:
+            raise self.error
         return self.verified
 
 
@@ -121,6 +132,25 @@ def test_runner_processes_exact_requested_count_and_completes() -> None:
     assert len(api.items) == 1
     assert api.completed_tasks == [7]
     assert api.completed_items[0][1]["status"] == "contacted"
+    assert api.reserved_task_item_ids == [1]
+
+
+def test_idempotent_retry_never_repeats_external_send() -> None:
+    api = FakeApi()
+    api.reservation_response = {"id": 41, "status": "sending", "idempotent_hit": True}
+    greeter = FakeGreeter()
+    task_greeter = TaskGreeter(
+        api,
+        task_id=7,
+        job_id=9,
+        candidate_id=1,
+        task_item_id=1,
+        greet_fn=greeter.greet,
+    )
+
+    assert task_greeter.greet(_candidates(1)[0], "您好") is False
+    assert greeter.calls == 0
+    assert api.unknown_outreach_calls == [(41, "existing_reservation_retry")]
 
 
 def test_runner_completes_with_actual_count_when_page_is_short() -> None:
@@ -152,7 +182,7 @@ def test_runner_skips_terminal_item_during_resume() -> None:
     assert greeter.calls == 0
 
 
-def test_runner_does_not_confirm_when_message_is_not_verified() -> None:
+def test_runner_releases_quota_when_send_did_not_start() -> None:
     api = FakeApi()
     greeter = FakeGreeter(verified=False)
     run_task_candidates(
@@ -163,8 +193,59 @@ def test_runner_does_not_confirm_when_message_is_not_verified() -> None:
         greeter=greeter,
     )
     assert api.confirmed == []
-    assert api.failed_outreach == [(41, "message_not_verified")]
+    assert api.failed_outreach == [(41, "send_not_started")]
+    assert api.unknown_outreach_calls == []
     assert api.failed_items == [(1, "message_not_verified")]
+
+
+def test_runner_marks_unverified_after_send_as_unknown_not_failed() -> None:
+    api = FakeApi()
+    run_task_candidates(
+        settings=AgentSettings(api_key="x", machine_id="mac-a"),
+        api=api,
+        task=_task(1),
+        candidates=_candidates(1),
+        greeter=FakeGreeter(verified=None),
+    )
+
+    assert api.confirmed == []
+    assert api.failed_outreach == []
+    assert api.unknown_outreach_calls == [(41, "send_result_unknown")]
+    assert api.failed_items == []
+    assert api.completed_items[0][1]["status"] == "needs_review"
+
+
+def test_runner_marks_send_action_outcome_unknown_for_review_and_keeps_quota() -> None:
+    api = FakeApi()
+    run_task_candidates(
+        settings=AgentSettings(api_key="x", machine_id="mac-a"),
+        api=api,
+        task=_task(1),
+        candidates=_candidates(1),
+        greeter=FakeGreeter(error=SendOutcomeUnknown("click timed out")),
+    )
+
+    assert api.failed_outreach == []
+    assert api.unknown_outreach_calls == [(41, "send_result_unknown")]
+    assert api.failed_items == []
+    assert api.completed_items == [(1, {
+        "status": "needs_review", "score_event_id": 31, "outreach_event_id": 41,
+    })]
+
+
+def test_runner_releases_quota_on_pre_send_exception() -> None:
+    api = FakeApi()
+    with pytest.raises(RuntimeError, match="chat input unavailable"):
+        run_task_candidates(
+            settings=AgentSettings(api_key="x", machine_id="mac-a"),
+            api=api,
+            task=_task(1),
+            candidates=_candidates(1),
+            greeter=FakeGreeter(error=RuntimeError("chat input unavailable")),
+        )
+
+    assert api.failed_outreach == [(41, "greet_failed_before_send")]
+    assert api.unknown_outreach_calls == []
 
 
 def test_runner_stops_and_leaves_item_unfinished_on_scoring_api_error() -> None:

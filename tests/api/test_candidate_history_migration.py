@@ -81,7 +81,7 @@ def test_candidate_history_migration_runs_after_existing_0003_database(tmp_path)
         versions = connection.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-        assert versions[-1] == "0005_task_entry_url_snapshot"
+        assert versions[-1] == "0006_outreach_quota_ledger"
         rows = connection.execute(
             text(
                 "SELECT candidate_id, job_id, status, migration_review_required "

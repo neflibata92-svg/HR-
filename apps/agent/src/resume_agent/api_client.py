@@ -108,6 +108,7 @@ class ApiClient:
         job_id: int,
         *,
         task_id: int,
+        task_item_id: int,
         message: str,
     ) -> dict[str, Any]:
         return self._post(
@@ -116,6 +117,7 @@ class ApiClient:
                 "candidate_id": candidate_id,
                 "job_id": job_id,
                 "task_id": task_id,
+                "task_item_id": task_item_id,
                 "message": message,
             },
         )
@@ -125,6 +127,9 @@ class ApiClient:
 
     def fail_outreach(self, event_id: int, reason: str) -> dict[str, Any]:
         return self._post(f"/api/outreach/{event_id}/fail", {"reason": reason})
+
+    def unknown_outreach(self, event_id: int, reason: str) -> dict[str, Any]:
+        return self._post(f"/api/outreach/{event_id}/unknown", {"reason": reason})
 
     def _post(self, path: str, payload: dict[str, Any] | None) -> dict[str, Any]:
         with httpx.Client(timeout=30.0) as client:

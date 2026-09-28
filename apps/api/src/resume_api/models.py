@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -47,6 +48,84 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OutreachQuotaLedger(Base):
+    """每位 HR 的累计打招呼额度；额度不会按日或按月重置。"""
+
+    __tablename__ = "outreach_quota_ledgers"
+    __table_args__ = (
+        CheckConstraint("hard_limit > 0", name="ck_outreach_quota_hard_limit_positive"),
+        CheckConstraint(
+            "confirmed_count >= 0 AND reserved_count >= 0",
+            name="ck_outreach_quota_counts_nonnegative",
+        ),
+        CheckConstraint(
+            "confirmed_count + reserved_count <= hard_limit",
+            name="ck_outreach_quota_within_limit",
+        ),
+        UniqueConstraint("user_id", name="uq_outreach_quota_ledger_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    hard_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=200, server_default="200")
+    confirmed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    reserved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OutreachQuotaReservation(Base):
+    """持久化的单次额度预留，由后续服务负责原子结算。"""
+
+    __tablename__ = "outreach_quota_reservations"
+    __table_args__ = (
+        UniqueConstraint("task_item_id", name="uq_outreach_quota_reservation_task_item"),
+        UniqueConstraint("outreach_event_id", name="uq_outreach_quota_reservation_event"),
+        ForeignKeyConstraint(
+            ("task_id", "user_id"),
+            ("screening_tasks.id", "screening_tasks.created_by_user_id"),
+            name="fk_outreach_quota_reservation_task_owner",
+        ),
+        ForeignKeyConstraint(
+            ("task_item_id", "task_id"),
+            ("screening_task_items.id", "screening_task_items.task_id"),
+            name="fk_outreach_quota_reservation_task_item_task",
+        ),
+        ForeignKeyConstraint(
+            ("outreach_event_id", "user_id"),
+            ("outreach_events.id", "outreach_events.quota_owner_user_id"),
+            name="fk_outreach_quota_reservation_event_owner",
+        ),
+        CheckConstraint(
+            "task_item_id IS NOT NULL OR outreach_event_id IS NOT NULL",
+            name="ck_outreach_quota_reservation_has_reference",
+        ),
+        CheckConstraint(
+            "task_item_id IS NULL OR task_id IS NOT NULL",
+            name="ck_outreach_quota_reservation_task_item_has_task",
+        ),
+        CheckConstraint(
+            "status IN ('reserved', 'confirmed', 'released', 'unknown')",
+            name="ck_outreach_quota_reservation_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("outreach_quota_ledgers.user_id"), nullable=False, index=True
+    )
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    task_item_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    outreach_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="reserved", server_default="reserved")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class JobPosting(Base):
@@ -185,7 +264,19 @@ class ScoreEvent(Base):
 
 class OutreachEvent(Base):
     __tablename__ = "outreach_events"
-    __table_args__ = (Index("ix_outreach_candidate_status", "candidate_id", "status"),)
+    __table_args__ = (
+        Index("ix_outreach_candidate_status", "candidate_id", "status"),
+        UniqueConstraint("id", "quota_owner_user_id", name="uq_outreach_event_id_quota_owner"),
+        ForeignKeyConstraint(
+            ("task_id", "quota_owner_user_id"),
+            ("screening_tasks.id", "screening_tasks.created_by_user_id"),
+            name="fk_outreach_event_task_quota_owner",
+        ),
+        CheckConstraint(
+            "task_id IS NULL OR quota_owner_user_id IS NOT NULL",
+            name="ck_outreach_event_task_has_quota_owner",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     candidate_id: Mapped[int | None] = mapped_column(ForeignKey("candidates.id"), nullable=True)
@@ -198,6 +289,9 @@ class OutreachEvent(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="confirmed")
     failure_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     manual_override_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    quota_owner_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
     greeted: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -213,6 +307,7 @@ class ScreeningTask(Base):
             "requested_count >= 1 AND requested_count <= 50",
             name="ck_screening_task_requested_count",
         ),
+        UniqueConstraint("id", "created_by_user_id", name="uq_screening_task_id_owner"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -281,6 +376,7 @@ class ScreeningTaskItem(Base):
     __tablename__ = "screening_task_items"
     __table_args__ = (
         UniqueConstraint("task_id", "candidate_id", name="uq_task_candidate"),
+        UniqueConstraint("id", "task_id", name="uq_screening_task_item_id_task"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

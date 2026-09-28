@@ -8,6 +8,7 @@ from typing import Any
 from resume_agent.browser import save_failure_screenshot
 from resume_agent.config import AgentSettings
 from resume_agent.parse_page import RawCandidate, detect_risk_page
+from resume_agent.pipeline import SendOutcomeUnknown
 from resume_agent.rate_limit import sleep_action_delay
 from resume_agent.selectors import BossSelectors
 from resume_agent.text_extract import parse_card_text
@@ -137,7 +138,7 @@ class BossLiveSession:
         except Exception:
             return candidate
 
-    def greet(self, candidate: RawCandidate, message: str, card: Any | None = None) -> bool:
+    def greet(self, candidate: RawCandidate, message: str, card: Any | None = None) -> bool | None:
         """核对候选人身份后发送，并验证消息已出现在页面。"""
 
         if card is not None:
@@ -188,24 +189,29 @@ class BossLiveSession:
             self.page.keyboard.type(message, delay=20)
         self._sleep()
         send_btn = self._first_matching_locator(self.selectors.send_button_selectors)
-        if send_btn is not None:
-            send_btn.first.click(timeout=5_000)
-        else:
-            self.page.keyboard.press("Enter")
-        self._sleep()
-        self.ensure_not_risk("send")
+        try:
+            if send_btn is not None:
+                send_btn.first.click(timeout=5_000)
+            else:
+                self.page.keyboard.press("Enter")
+            self._sleep()
+            self.ensure_not_risk("send")
 
-        sent = self._first_matching_locator(self.selectors.sent_message_selectors)
-        if sent is None:
-            return self._dom_error("sent_message_not_found")
-        for index in range(sent.count()):
-            try:
-                if message in (sent.nth(index).inner_text(timeout=1_000) or ""):
-                    self._clear_dom_error()
-                    return True
-            except Exception:
-                continue
-        return self._dom_error("sent_message_not_verified")
+            sent = self._first_matching_locator(self.selectors.sent_message_selectors)
+            if sent is None:
+                self._dom_error("sent_message_not_found")
+                return None
+            for index in range(sent.count()):
+                try:
+                    if message in (sent.nth(index).inner_text(timeout=1_000) or ""):
+                        self._clear_dom_error()
+                        return True
+                except Exception:
+                    continue
+            self._dom_error("sent_message_not_verified")
+            return None
+        except Exception as exc:
+            raise SendOutcomeUnknown("send action outcome is unknown") from exc
 
     def download_candidate_attachment(
         self,

@@ -89,12 +89,14 @@ def add_score_event(db: Session, payload: ScoreEventCreate) -> ScoreEvent:
     return event
 
 
-def add_outreach(db: Session, payload: OutreachCreate) -> tuple[OutreachEvent, bool]:
+def add_outreach(
+    db: Session, payload: OutreachCreate, *, actor_user_id: int
+) -> tuple[OutreachEvent, bool]:
     existing = db.scalar(
         select(OutreachEvent).where(
             OutreachEvent.candidate_id == payload.candidate_id,
             OutreachEvent.job_id == payload.job_id,
-            OutreachEvent.status.in_({"sending", "sent", "confirmed"}),
+            OutreachEvent.status.in_({"sending", "unknown", "sent", "confirmed"}),
         )
     )
     if existing is not None:
@@ -106,6 +108,7 @@ def add_outreach(db: Session, payload: OutreachCreate) -> tuple[OutreachEvent, b
             job_id=payload.job_id,
             message="legacy outreach",
         ),
+        actor_user_id=actor_user_id,
     )
     if payload.greeted:
         event = outreach_service.confirm(db, event.id)

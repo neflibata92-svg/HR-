@@ -63,6 +63,8 @@ const form = reactive<JobWrite>({
   min_action_delay_ms: 1500,
   max_action_delay_ms: 4000,
   default_requested_count: 20,
+  critical_fields: [],
+  critical_fields_confirmed: false,
 });
 
 const filteredJobs = computed(() => {
@@ -175,6 +177,8 @@ function resetForm(job?: Job): void {
   form.min_action_delay_ms = job?.min_action_delay_ms ?? 1500;
   form.max_action_delay_ms = job?.max_action_delay_ms ?? 4000;
   form.default_requested_count = job?.default_requested_count ?? 20;
+  form.critical_fields = job?.critical_fields ?? [];
+  form.critical_fields_confirmed = job?.critical_fields_confirmed ?? false;
   saveError.value = "";
 }
 
@@ -213,6 +217,8 @@ async function save(): Promise<void> {
     min_action_delay_ms: Number(form.min_action_delay_ms),
     max_action_delay_ms: Number(form.max_action_delay_ms),
     default_requested_count: form.default_requested_count === null ? null : Number(form.default_requested_count),
+    critical_fields: form.critical_fields,
+    critical_fields_confirmed: form.critical_fields_confirmed,
   };
   try {
     const saved = editingJob.value

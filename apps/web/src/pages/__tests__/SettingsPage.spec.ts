@@ -9,6 +9,9 @@ vi.mock("../../api", async () => {
   const actual = await vi.importActual<typeof import("../../api")>("../../api");
   return {
     ...actual,
+    getMyOutreachQuota: vi.fn(),
+    listUnknownOutreachEvents: vi.fn(),
+    releaseUnknownOutreachEvent: vi.fn(),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     revokeApiKey: vi.fn(),
@@ -28,6 +31,17 @@ const lead: UserMe = {
 const activeKey: ApiKeyRow = {
   id: 3, name: "桌面 Agent", key_prefix: "rsk_live_abcd", created_at: "2026-09-20T08:00:00Z", revoked_at: null,
 };
+const unknownEvent: api.UnknownOutreachEvent = {
+  id: 12,
+  candidate_id: 4,
+  candidate_name: "李女士",
+  job_id: 3,
+  job_name: "产品经理",
+  quota_owner_username: "hr.one",
+  task_id: 8,
+  failure_reason: "未能确认发送结果",
+  created_at: "2026-09-25T10:00:00Z",
+};
 
 function mountPage(user: UserMe = member) {
   return mount(SettingsPage, {
@@ -41,22 +55,45 @@ describe("SettingsPage", () => {
     vi.resetAllMocks();
     vi.mocked(api.listApiKeys).mockResolvedValue([activeKey]);
     vi.mocked(api.listUsers).mockResolvedValue([]);
+    vi.mocked(api.getMyOutreachQuota).mockResolvedValue({
+      limit: 200, confirmed: 17, reserved: 3, remaining: 180,
+    });
+    vi.mocked(api.listUnknownOutreachEvents).mockResolvedValue([]);
+    vi.mocked(api.releaseUnknownOutreachEvent).mockResolvedValue({
+      id: 12, idempotent_hit: false, candidate_id: 4, screening_record_id: null, job_id: 3,
+      task_id: 8, message_snapshot: "你好", status: "released", failure_reason: "经核实未发送",
+      manual_override_by_user_id: 1, created_at: "2026-09-25T10:00:00Z", confirmed_at: null,
+    });
   });
 
   it("restores system settings while unsupported policies remain disabled", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    for (const text of ["SYSTEM SETTINGS.", "ACCOUNT & CONNECTION", "DAILY SHARED QUOTA", "200 次 / 天", "SAFETY AUTOMATION"]) {
+    for (const text of ["SYSTEM SETTINGS.", "ACCOUNT & CONNECTION", "PERSONAL OUTREACH LIMIT", "累计 200 次", "SAFETY AUTOMATION"]) {
       expect(wrapper.text()).toContain(text);
     }
+    expect(wrapper.text()).toContain("已确认 17");
+    expect(wrapper.text()).toContain("预留中 3");
+    expect(wrapper.text()).toContain("可用 180");
+    expect(wrapper.text()).toContain("历史联系只用于去重，不扣新额度");
     expect(wrapper.text()).toContain("BOSS 账号状态暂未接入");
     for (const label of ["随机发送间隔", "登录失效自动暂停", "连续异常自动暂停", "额度耗尽自动暂停"]) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes("disabled")).toBeDefined();
     }
     expect(wrapper.text()).toContain("服务端策略，前端暂不可修改");
-    expect(wrapper.text()).not.toMatch(/今日已用 126|剩余 74/);
+    expect(wrapper.text()).not.toContain("今日");
     expect(api.listUsers).not.toHaveBeenCalled();
+    expect(api.listUnknownOutreachEvents).not.toHaveBeenCalled();
+  });
+
+  it("shows a quota load error without hiding the fixed limit", async () => {
+    vi.mocked(api.getMyOutreachQuota).mockRejectedValue(new Error("503 unavailable"));
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("累计 200 次");
+    expect(wrapper.get('[role="alert"]').text()).toContain("加载联系额度失败");
   });
 
   it("shows the member account and personal keys without loading HR management", async () => {
@@ -89,6 +126,57 @@ describe("SettingsPage", () => {
     expect(wrapper.text()).toContain("HR 总负责人");
     expect(wrapper.text()).toContain("HR 账号管理");
     expect(api.listUsers).toHaveBeenCalledOnce();
+    expect(api.listUnknownOutreachEvents).toHaveBeenCalledOnce();
+  });
+
+  it("lets only admins load and review unknown contacts", async () => {
+    vi.mocked(api.listUnknownOutreachEvents).mockResolvedValue([unknownEvent]);
+    const wrapper = mountPage(admin);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("待核实联系");
+    expect(wrapper.text()).toContain("李女士 · 产品经理");
+    expect(wrapper.text()).toContain("额度所属 HR：hr.one");
+    expect(wrapper.get('label[for="unknown-reason-12"]').text()).toContain("核实理由（必填）");
+    const submit = wrapper.get('button[type="submit"]');
+    expect(submit.attributes("disabled")).toBeDefined();
+
+    await wrapper.get("textarea").setValue("  ");
+    expect(submit.attributes("disabled")).toBeDefined();
+    await wrapper.get("textarea").setValue("已核实平台会话记录，确认没有发送");
+    expect(submit.attributes("disabled")).toBeDefined();
+    await wrapper.get('.unknown-outreach-panel input[type="checkbox"]').setValue(true);
+    expect((wrapper.get('.unknown-outreach-panel input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.get('button[type="submit"]').attributes("disabled")).toBeUndefined();
+
+    vi.mocked(api.listUnknownOutreachEvents).mockResolvedValueOnce([]);
+    await wrapper.get(".unknown-outreach-review").trigger("submit");
+    await flushPromises();
+
+    expect(api.releaseUnknownOutreachEvent).toHaveBeenCalledWith(12, "已核实平台会话记录，确认没有发送");
+    expect(api.listUnknownOutreachEvents).toHaveBeenCalledTimes(2);
+    expect(api.getMyOutreachQuota).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('[role="status"]').text()).toContain("已确认候选人“李女士”未发送并退还额度");
+    expect(wrapper.text()).toContain("当前没有待核实联系");
+  });
+
+  it("shows unknown-contact load and release errors accessibly", async () => {
+    vi.mocked(api.listUnknownOutreachEvents).mockRejectedValueOnce(new Error("503 unavailable"));
+    const wrapper = mountPage(admin);
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain("加载待核实联系失败");
+
+    vi.mocked(api.listUnknownOutreachEvents).mockResolvedValue([unknownEvent]);
+    await wrapper.get(".unknown-outreach-panel button").trigger("click");
+    await flushPromises();
+    vi.mocked(api.releaseUnknownOutreachEvent).mockRejectedValue(new Error("409 conflict"));
+    await wrapper.get("textarea").setValue("已人工核实未发送");
+    await wrapper.get('.unknown-outreach-panel input[type="checkbox"]').setValue(true);
+    await wrapper.get(".unknown-outreach-review").trigger("submit");
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toContain("处理待核实联系失败：409 conflict");
+    expect(wrapper.text()).toContain("李女士 · 产品经理");
   });
 
   it("distinguishes a failed key load from an empty list and retries", async () => {

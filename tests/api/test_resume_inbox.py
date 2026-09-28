@@ -46,6 +46,7 @@ def _waiting_candidate(*, owner_name: str, candidate_name: str, job_names: list[
                 candidate_id=candidate.id,
                 job_id=job.id,
                 task_id=task.id,
+                quota_owner_user_id=owner.id,
                 message_snapshot="您好",
                 status="confirmed",
                 greeted=True,

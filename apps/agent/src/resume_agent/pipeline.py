@@ -23,7 +23,11 @@ class Scorer(Protocol):
 
 
 class Greeter(Protocol):
-    def greet(self, candidate: RawCandidate, message: str) -> bool: ...
+    def greet(self, candidate: RawCandidate, message: str) -> bool | None: ...
+
+
+class SendOutcomeUnknown(RuntimeError):
+    """发送动作已触发，但无法确认平台是否接受。"""
 
 
 @dataclass(frozen=True)

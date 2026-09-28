@@ -22,6 +22,7 @@ from resume_api.models import (
 )
 from resume_api.schemas import ScreeningTaskCreate
 from resume_api.services import jobs as jobs_service
+from resume_api.services import outreach_quota as quota_service
 
 
 class ScreeningTaskError(RuntimeError):
@@ -86,6 +87,9 @@ def create_task(db: Session, payload: ScreeningTaskCreate, *, user_id: int) -> S
         _require_assignable_agent(assigned_agent)
 
     requested_count = job.default_requested_count if uses_job_defaults else payload.requested_count
+    remaining = quota_service.remaining_for_task_admission(db, user_id)
+    if requested_count > remaining:
+        raise ScreeningTaskError(409, "outreach quota is insufficient for this batch")
     critical_fields = []
     critical_fields_source: dict[str, object] = {"source": "jd"}
 

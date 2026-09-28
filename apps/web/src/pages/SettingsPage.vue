@@ -3,11 +3,16 @@ import { onMounted, ref } from "vue";
 
 import {
   createApiKey,
+  getMyOutreachQuota,
+  listUnknownOutreachEvents,
   listApiKeys,
+  releaseUnknownOutreachEvent,
   revokeApiKey,
   type ApiKeyCreated,
   type ApiKeyRow,
   type UserMe,
+  type OutreachQuota,
+  type UnknownOutreachEvent,
 } from "../api";
 import AppDrawer from "../components/AppDrawer.vue";
 import HrAccountManagement from "../components/HrAccountManagement.vue";
@@ -24,6 +29,60 @@ const keyName = ref("");
 const creating = ref(false);
 const newKey = ref<ApiKeyCreated | null>(null);
 const revokingId = ref<number | null>(null);
+const quota = ref<OutreachQuota | null>(null);
+const quotaError = ref("");
+const unknownEvents = ref<UnknownOutreachEvent[]>([]);
+const unknownLoading = ref(false);
+const unknownLoadError = ref("");
+const unknownConfirmed = ref<Record<number, boolean>>({});
+const unknownReasons = ref<Record<number, string>>({});
+const releasingUnknownId = ref<number | null>(null);
+const unknownActionError = ref("");
+const unknownActionSuccess = ref("");
+
+async function loadQuota(): Promise<void> {
+  quotaError.value = "";
+  try {
+    quota.value = await getMyOutreachQuota();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    quotaError.value = `加载联系额度失败：${message}`;
+  }
+}
+
+async function loadUnknownEvents(): Promise<void> {
+  unknownLoading.value = true;
+  unknownLoadError.value = "";
+  try {
+    unknownEvents.value = await listUnknownOutreachEvents();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    unknownLoadError.value = `加载待核实联系失败：${message}`;
+  } finally {
+    unknownLoading.value = false;
+  }
+}
+
+async function releaseUnknown(event: UnknownOutreachEvent): Promise<void> {
+  const reason = unknownReasons.value[event.id]?.trim() ?? "";
+  if (!unknownConfirmed.value[event.id] || !reason || releasingUnknownId.value !== null) return;
+
+  releasingUnknownId.value = event.id;
+  unknownActionError.value = "";
+  unknownActionSuccess.value = "";
+  try {
+    await releaseUnknownOutreachEvent(event.id, reason);
+    unknownActionSuccess.value = `已确认候选人“${event.candidate_name}”未发送并退还额度。`;
+    delete unknownConfirmed.value[event.id];
+    delete unknownReasons.value[event.id];
+    await Promise.all([loadUnknownEvents(), loadQuota()]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    unknownActionError.value = `处理待核实联系失败：${message}`;
+  } finally {
+    releasingUnknownId.value = null;
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -78,7 +137,11 @@ async function revoke(key: ApiKeyRow): Promise<void> {
   }
 }
 
-onMounted(() => void load());
+onMounted(() => {
+  void load();
+  void loadQuota();
+  if (props.user.role === "admin") void loadUnknownEvents();
+});
 </script>
 
 <template>
@@ -107,11 +170,16 @@ onMounted(() => void load());
       </section>
 
       <section class="rule-hero">
-        <p class="eyebrow">DAILY SHARED QUOTA</p>
-        <h2>200 次 / 天</h2>
-        <p>每位 HR 每日 200 次，全岗位共享。</p>
-        <div class="quota-values"><span>今日已用 <b>—</b></span><span>今日剩余 <b>—</b></span></div>
-        <small>用量接口暂未接入</small>
+        <p class="eyebrow">PERSONAL OUTREACH LIMIT</p>
+        <h2>累计 {{ quota?.limit ?? 200 }} 次</h2>
+        <p>每位 HR 自本功能上线后累计最多联系 200 人；历史联系只用于去重，不扣新额度。</p>
+        <div v-if="quota" class="quota-values" aria-live="polite">
+          <span>已确认 <b>{{ quota.confirmed }}</b></span>
+          <span>预留中 <b>{{ quota.reserved }}</b></span>
+          <span>可用 <b>{{ quota.remaining }}</b></span>
+        </div>
+        <p v-else-if="quotaError" class="error-text" role="alert">{{ quotaError }}</p>
+        <small v-else>正在加载当前账号额度…</small>
       </section>
 
       <section class="panel safety-panel">
@@ -159,6 +227,46 @@ onMounted(() => void load());
     </section>
 
     <HrAccountManagement v-if="props.user.role === 'admin'" />
+
+    <section v-if="props.user.role === 'admin'" class="panel unknown-outreach-panel" aria-labelledby="unknown-outreach-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">MANUAL REVIEW</p><h2 id="unknown-outreach-heading">待核实联系</h2></div>
+        <button type="button" :disabled="unknownLoading" @click="loadUnknownEvents">刷新列表</button>
+      </div>
+      <p class="muted">仅在核实候选人确实未收到招呼后，才确认未发送并退还预留额度。</p>
+      <p v-if="unknownLoadError" class="error" role="alert">{{ unknownLoadError }} <button type="button" @click="loadUnknownEvents">重试</button></p>
+      <p v-if="unknownActionError" class="error" role="alert">{{ unknownActionError }}</p>
+      <p v-if="unknownActionSuccess" class="success-message" role="status" aria-live="polite">{{ unknownActionSuccess }}</p>
+      <p v-if="unknownLoading" aria-live="polite">正在加载待核实联系…</p>
+      <p v-else-if="!unknownLoadError && unknownEvents.length === 0" class="muted">当前没有待核实联系。</p>
+      <ul v-else-if="!unknownLoadError" class="unknown-outreach-list">
+        <li v-for="event in unknownEvents" :key="event.id" class="setting-row unknown-outreach-item">
+          <div>
+            <h3>{{ event.candidate_name }} · {{ event.job_name }}</h3>
+            <p>额度所属 HR：{{ event.quota_owner_username }}<span v-if="event.task_id !== null"> · 批次 #{{ event.task_id }}</span></p>
+            <p>异常原因：{{ event.failure_reason || "未提供" }}</p>
+            <time v-if="event.created_at" :datetime="event.created_at">{{ new Date(event.created_at).toLocaleString("zh-CN") }}</time>
+          </div>
+          <form class="unknown-outreach-review" @submit.prevent="releaseUnknown(event)">
+            <label :for="`unknown-reason-${event.id}`">核实理由（必填）</label>
+            <textarea
+              :id="`unknown-reason-${event.id}`"
+              v-model="unknownReasons[event.id]"
+              required
+              rows="2"
+              :disabled="releasingUnknownId !== null"
+            />
+            <label class="setting-row">
+              <input v-model="unknownConfirmed[event.id]" type="checkbox" required :disabled="releasingUnknownId !== null" />
+              <span>我已核实该候选人未收到招呼，确认退还额度</span>
+            </label>
+            <button type="submit" :disabled="!unknownConfirmed[event.id] || !unknownReasons[event.id]?.trim() || releasingUnknownId !== null">
+              {{ releasingUnknownId === event.id ? "正在处理…" : "确认未发送并退还额度" }}
+            </button>
+          </form>
+        </li>
+      </ul>
+    </section>
 
     <AppDrawer :open="showCreate" title="创建 Agent Key" @close="showCreate = false">
       <div class="grid">

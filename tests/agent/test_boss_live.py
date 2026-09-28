@@ -7,6 +7,7 @@ import pytest
 from resume_agent.boss_live import BossLiveSession, PageStateError, RepeatedDomError
 from resume_agent.config import AgentSettings
 from resume_agent.parse_page import RawCandidate
+from resume_agent.pipeline import SendOutcomeUnknown
 from resume_agent.selectors import BossSelectors
 
 
@@ -111,6 +112,51 @@ def test_page_change_after_click_stops_immediately() -> None:
     card.click.side_effect = redirect
     with pytest.raises(PageStateError, match="login_required"):
         session.greet(candidate, "您好", card)
+
+
+def test_greet_returns_unknown_when_send_action_cannot_be_verified() -> None:
+    page = _page("https://example/recommend", "正常结果")
+    session = BossLiveSession(page, AgentSettings(api_key="x"), _selectors(), min_delay_ms=0, max_delay_ms=0)
+    candidate = RawCandidate("boss-1", "王五", "公司A", 30, 4, 2, 4)
+    greet_button = Mock()
+    input_box = Mock()
+    send_button = Mock()
+    page.locator.side_effect = lambda selector: {
+        ".greet": greet_button,
+        ".input": input_box,
+        ".send": send_button,
+    }.get(selector, Mock(count=Mock(return_value=0)))
+    for locator in (greet_button, input_box, send_button):
+        locator.count.return_value = 1
+    page.keyboard = Mock()
+    session.ensure_not_risk = Mock()
+    session._sleep = Mock()
+
+    assert session.greet(candidate, "您好") is None
+    send_button.first.click.assert_called_once()
+
+
+def test_greet_marks_send_click_exception_as_unknown() -> None:
+    page = _page("https://example/recommend", "正常结果")
+    session = BossLiveSession(page, AgentSettings(api_key="x"), _selectors(), min_delay_ms=0, max_delay_ms=0)
+    candidate = RawCandidate("boss-1", "王五", "公司A", 30, 4, 2, 4)
+    greet_button = Mock()
+    input_box = Mock()
+    send_button = Mock()
+    send_button.first.click.side_effect = TimeoutError("click timed out")
+    page.locator.side_effect = lambda selector: {
+        ".greet": greet_button,
+        ".input": input_box,
+        ".send": send_button,
+    }.get(selector, Mock(count=Mock(return_value=0)))
+    for locator in (greet_button, input_box, send_button):
+        locator.count.return_value = 1
+    page.keyboard = Mock()
+    session.ensure_not_risk = Mock()
+    session._sleep = Mock()
+
+    with pytest.raises(SendOutcomeUnknown, match="send action outcome is unknown"):
+        session.greet(candidate, "您好")
 
 
 def test_extract_candidates_honors_task_limit_above_default() -> None:

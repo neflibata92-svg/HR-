@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import httpx
+import pytest
+
 from resume_agent.api_client import ApiClient
 from resume_agent.config import AgentSettings
 
@@ -63,13 +66,15 @@ def test_outreach_api_client_supports_two_phase_confirmation() -> None:
         _response({"id": 21, "status": "sending"}),
         _response({"id": 21, "status": "confirmed"}),
         _response({"id": 22, "status": "failed"}),
+        _response({"id": 23, "status": "unknown"}),
     ]
 
     with patch("resume_agent.api_client.httpx.Client", return_value=http_client):
         api = _client()
-        event = api.reserve_outreach(3, 4, task_id=7, message="您好")
+        event = api.reserve_outreach(3, 4, task_id=7, task_item_id=11, message="您好")
         api.confirm_outreach(event["id"])
         api.fail_outreach(22, "message_not_verified")
+        api.unknown_outreach(23, "send_result_unknown")
 
     calls = http_client.post.call_args_list
     assert calls[0].args[0].endswith("/api/outreach/reservations")
@@ -77,10 +82,35 @@ def test_outreach_api_client_supports_two_phase_confirmation() -> None:
         "candidate_id": 3,
         "job_id": 4,
         "task_id": 7,
+        "task_item_id": 11,
         "message": "您好",
     }
     assert calls[1].args[0].endswith("/api/outreach/21/confirm")
     assert calls[2].kwargs["json"] == {"reason": "message_not_verified"}
+    assert calls[3].args[0].endswith("/api/outreach/23/unknown")
+    assert calls[3].kwargs["json"] == {"reason": "send_result_unknown"}
+
+
+def test_outreach_reservation_retry_reuses_task_item_id_after_timeout() -> None:
+    http_client = Mock()
+    http_client.__enter__ = Mock(return_value=http_client)
+    http_client.__exit__ = Mock(return_value=False)
+    http_client.post.side_effect = [
+        httpx.ReadTimeout("response timed out"),
+        _response({"id": 21, "status": "sending"}),
+    ]
+
+    with patch("resume_agent.api_client.httpx.Client", return_value=http_client):
+        api = _client()
+        with pytest.raises(httpx.ReadTimeout):
+            api.reserve_outreach(3, 4, task_id=7, task_item_id=11, message="您好")
+        event = api.reserve_outreach(3, 4, task_id=7, task_item_id=11, message="您好")
+
+    assert event["id"] == 21
+    assert http_client.post.call_count == 2
+    payloads = [call.kwargs["json"] for call in http_client.post.call_args_list]
+    assert payloads[0] == payloads[1]
+    assert payloads[0]["task_item_id"] == 11
 
 
 def test_agent_api_client_uses_explicit_assignment_and_control_endpoints() -> None:

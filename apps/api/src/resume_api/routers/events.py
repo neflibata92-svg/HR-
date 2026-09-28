@@ -68,7 +68,7 @@ def post_outreach(
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="task-based outreach is required for members")
     try:
-        event, hit = events_service.add_outreach(db, payload)
+        event, hit = events_service.add_outreach(db, payload, actor_user_id=user.id)
     except outreach_service.OutreachError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     if payload.attachment_received and hit:

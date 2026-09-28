@@ -87,6 +87,58 @@ def test_existing_password_flag_does_not_skip_later_migrations(tmp_path) -> None
     assert versions == ["0001_add_must_change_password"]
 
 
+def test_legacy_outreach_migration_preserves_rows_and_creates_quota_tables_once(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-outreach.db'}")
+    with engine.begin() as connection:
+        for ddl in (
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE, password_hash VARCHAR(200) NOT NULL, role VARCHAR(20), is_active BOOLEAN, created_at DATETIME)",
+            "CREATE TABLE job_postings (id INTEGER PRIMARY KEY, name VARCHAR(200) NOT NULL, jd_text TEXT NOT NULL, boss_entry_url VARCHAR(500))",
+            "CREATE TABLE screening_tasks (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, created_by_user_id INTEGER NOT NULL, machine_id VARCHAR(100), requested_count INTEGER NOT NULL, status VARCHAR(30), FOREIGN KEY(job_id) REFERENCES job_postings(id), FOREIGN KEY(created_by_user_id) REFERENCES users(id))",
+            "CREATE TABLE screening_task_items (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, FOREIGN KEY(task_id) REFERENCES screening_tasks(id))",
+            "CREATE TABLE outreach_events (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, task_id INTEGER, greeted BOOLEAN, created_at DATETIME, FOREIGN KEY(job_id) REFERENCES job_postings(id), FOREIGN KEY(task_id) REFERENCES screening_tasks(id))",
+        ):
+            connection.execute(text(ddl))
+        connection.execute(
+            text("INSERT INTO users VALUES (1, 'hr', 'hash', 'member', 1, '2026-01-01')")
+        )
+        connection.execute(text("INSERT INTO job_postings VALUES (1, '工程师', 'Python', '')"))
+        connection.execute(text("INSERT INTO screening_tasks VALUES (10, 1, 1, 'legacy', 1, 'completed')"))
+        connection.execute(text("INSERT INTO screening_task_items VALUES (20, 10)"))
+        connection.execute(text("INSERT INTO outreach_events VALUES (30, 1, 10, 1, '2026-02-01')"))
+
+    run_migrations(engine)
+    run_migrations(engine)
+
+    inspector = inspect(engine)
+    assert "outreach_quota_ledgers" in inspector.get_table_names()
+    assert "outreach_quota_reservations" in inspector.get_table_names()
+    with engine.connect() as connection:
+        quota_table_count = connection.execute(
+            text("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'outreach_quota_ledgers'")
+        ).scalar_one()
+        assert quota_table_count == 1
+        assert connection.execute(text("SELECT id FROM users")).scalars().all() == [1]
+        assert connection.execute(text("SELECT id FROM screening_tasks")).scalars().all() == [10]
+        assert connection.execute(text("SELECT id FROM screening_task_items")).scalars().all() == [20]
+        assert connection.execute(text("SELECT id FROM outreach_events")).scalars().all() == [30]
+        assert connection.execute(
+            text("SELECT quota_owner_user_id FROM outreach_events WHERE id = 30")
+        ).scalar_one() == 1
+        quota = connection.execute(
+            text(
+                "SELECT hard_limit, confirmed_count, reserved_count "
+                "FROM outreach_quota_ledgers WHERE user_id = 1"
+            )
+        ).one()
+        assert tuple(quota) == (200, 0, 0)
+        assert connection.execute(
+            text("SELECT COUNT(*) FROM outreach_quota_reservations")
+        ).scalar_one() == 0
+        assert connection.execute(
+            text("SELECT COUNT(*) FROM schema_migrations WHERE version = '0006_outreach_quota_ledger'")
+        ).scalar_one() == 1
+
+
 def test_migrates_legacy_talent_history_without_losing_records(tmp_path) -> None:
     old_resume = tmp_path / "old.pdf"
     old_resume.write_bytes(b"legacy resume")
@@ -306,6 +358,7 @@ def test_migrates_legacy_talent_history_without_losing_records(tmp_path) -> None
             "0003_job_task_resume_archives",
             "0004_candidate_history",
             "0005_task_entry_url_snapshot",
+            "0006_outreach_quota_ledger",
         ]
 
     unique_sets = {
